@@ -1,0 +1,25 @@
+{
+  "blocks": [
+    { "id": "b01", "type": "heading", "level": 2, "text": "Why it is worth watching" },
+    {
+      "id": "b02",
+      "type": "paragraph",
+      "text": "Most introductions to neural networks start with equations. This one starts with a concrete problem, recognising handwritten digits, and only introduces **neurons**, **weights** and **biases** when you already know why they are needed."
+    },
+    {
+      "id": "b03",
+      "type": "list",
+      "ordered": false,
+      "items": [
+        "A neuron is just a number between 0 and 1, its *activation*.",
+        "Each layer's activations are a weighted sum of the previous layer, passed through a squashing function.",
+        "Learning means finding the weights and biases that make the output layer match the right digit."
+      ]
+    },
+    {
+      "id": "b04",
+      "type": "paragraph",
+      "text": "It pairs well with the [precision and recall](#/?item=precision-and-recall-without-the-confusion) article, which covers how to judge a model once it has been trained."
+    }
+  ]
+}

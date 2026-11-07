@@ -1,0 +1,123 @@
+{
+  "blocks": [
+    {
+      "id": "b01",
+      "type": "paragraph",
+      "text": "Most people learn Git as a list of commands: add, commit, push, pull. That works until something goes wrong and the commands stop making sense. Underneath, Git is a small and elegant database, and once you see its shape, most of its behaviour becomes predictable."
+    },
+    {
+      "id": "b02",
+      "type": "heading",
+      "level": 2,
+      "text": "Everything is an object"
+    },
+    {
+      "id": "b03",
+      "type": "paragraph",
+      "text": "Git stores your project as objects inside the `.git/objects` directory. Each object is named by a hash of its contents, which is why Git is described as a **content-addressable store**. By default that hash is SHA-1; recent versions of Git can also create repositories that use SHA-256. There are four kinds of object."
+    },
+    {
+      "id": "b04",
+      "type": "list",
+      "ordered": false,
+      "items": [
+        "**Blob:** the contents of a single file. A blob has no name and no permissions, only bytes.",
+        "**Tree:** a directory listing that maps names and file modes to blobs and to other trees.",
+        "**Commit:** a pointer to one top-level tree, plus the author, the committer, a message, and the hashes of its parent commits.",
+        "**Annotated tag:** a named pointer to another object, usually a commit, with its own message and optional signature."
+      ]
+    },
+    {
+      "id": "b05",
+      "type": "paragraph",
+      "text": "Because an object's name is derived from its content, identical files anywhere in your history are stored once. Changing a single character produces a new blob with a new hash, which produces a new tree, which produces a new commit."
+    },
+    {
+      "id": "b06",
+      "type": "heading",
+      "level": 2,
+      "text": "Looking inside a commit"
+    },
+    {
+      "id": "b07",
+      "type": "paragraph",
+      "text": "You can inspect any object with `git cat-file`. Asking for the commit that HEAD points to prints something like this:"
+    },
+    {
+      "id": "b08",
+      "type": "code",
+      "language": "shell",
+      "text": "$ git cat-file -p HEAD\ntree 9c1e4b7d2a6f0835e1c94b2d7a3f6e08c5b1d4a9\nparent 4f2a81e0c3d97b56a10e4f8c2b6d3a95e7f0c142\nauthor Mohamad Ibrahim <mohamad@example.com> 1761552000 +0100\ncommitter Mohamad Ibrahim <mohamad@example.com> 1761552000 +0100\n\nAdd reading time to article cards"
+    },
+    {
+      "id": "b09",
+      "type": "paragraph",
+      "text": "Following the tree line with another cat-file call shows the directory listing for that snapshot, and following any blob shows the raw file. No diff is stored in this chain: every commit describes a *complete snapshot*, and Git computes diffs on demand by comparing trees."
+    },
+    {
+      "id": "b10",
+      "type": "quote",
+      "text": "On disk, Git later packs objects together and compresses similar ones as deltas. That is a storage optimisation. The model you work with is always snapshots."
+    },
+    {
+      "id": "b11",
+      "type": "heading",
+      "level": 2,
+      "text": "Branches are just names"
+    },
+    {
+      "id": "b12",
+      "type": "paragraph",
+      "text": "A branch is a reference: a name stored under `.git/refs/heads` that contains the hash of one commit. Creating a branch writes that one small reference and copies none of your code. HEAD is usually a symbolic reference whose content is a line such as `ref: refs/heads/main`."
+    },
+    {
+      "id": "b13",
+      "type": "paragraph",
+      "text": "When you commit, Git writes the new objects and moves the branch that HEAD points to forward to the new commit. A detached HEAD simply means HEAD contains a commit hash directly instead of the name of a branch."
+    },
+    {
+      "id": "b14",
+      "type": "heading",
+      "level": 2,
+      "text": "Why this matters day to day"
+    },
+    {
+      "id": "b15",
+      "type": "list",
+      "ordered": false,
+      "items": [
+        "Commits are cheap, so commit small and often. Git only writes objects for content that changed.",
+        "Rewriting history with rebase or amend never edits a commit. It creates new commits and moves a branch to point at them.",
+        "Lost work is rarely lost. If a commit was ever made, `git reflog` will usually show its hash for weeks afterwards."
+      ]
+    },
+    {
+      "id": "b16",
+      "type": "paragraph",
+      "text": "Git feels complicated because its interface grew over many years. Its data model did not. Blobs, trees, commits, and references are enough to explain almost every command you will ever run."
+    },
+    {
+      "id": "b17",
+      "type": "details",
+      "summary": "Try it yourself in any repository",
+      "blocks": [
+        {
+          "id": "b17a",
+          "type": "paragraph",
+          "text": "Run these commands inside a Git repository to walk from a commit down to a single file:"
+        },
+        {
+          "id": "b17b",
+          "type": "code",
+          "language": "shell",
+          "text": "git cat-file -t HEAD          # prints: commit\ngit cat-file -p HEAD^{tree}   # the top-level directory listing\ngit cat-file -p HEAD:README.md # the contents of one file (a blob)"
+        },
+        {
+          "id": "b17c",
+          "type": "paragraph",
+          "text": "The chapter on [Git objects in Pro Git](https://git-scm.com/book/en/v2/Git-Internals-Git-Objects) goes further and builds a commit by hand."
+        }
+      ]
+    }
+  ]
+}

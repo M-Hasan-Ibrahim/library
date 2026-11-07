@@ -1,0 +1,129 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [8 0 R 10 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>
+endobj
+6 0 obj
+<< /Title (Writing Technical Specifications That Get Read) /Author (Mohamad Hassan Ibrahim) >>
+endobj
+7 0 obj
+<< /Length 3458 >>
+stream
+BT 0.137 0.196 0.188 rg /F2 22 Tf 72.00 694.00 Td (Writing Technical Specifications That Get) Tj ET
+BT 0.137 0.196 0.188 rg /F2 22 Tf 72.00 668.00 Td (Read) Tj ET
+BT 0.365 0.431 0.412 rg /F1 12 Tf 72.00 648.00 Td (A practical guide for engineering teams) Tj ET
+BT 0.365 0.431 0.412 rg /F1 10 Tf 72.00 632.00 Td (Mohamad Hassan Ibrahim - Software Engineering notes) Tj ET
+0.835 0.647 0.592 RG 2 w 72 618.00 m 540 618.00 l S
+BT 0.137 0.196 0.188 rg /F2 13.5 Tf 72.00 579.00 Td (Why specifications fail) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 559.00 Td (Most specifications are not wrong; they are unread. A forty-page document written to cover) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 543.00 Td (every case often arrives after the important decisions have already been made in chat) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 527.00 Td (threads and meetings. A useful specification is short enough to read in one sitting, specific) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 511.00 Td (enough to argue with, and written early enough to change the outcome.) Tj ET
+BT 0.137 0.196 0.188 rg /F2 13.5 Tf 72.00 474.00 Td (1. Start with the problem) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 454.00 Td (Open with two or three sentences that describe the problem in terms a new team member) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 438.00 Td (would understand. State who is affected, what they cannot do today, and how you will know) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 422.00 Td (the problem is solved. If you cannot write this section clearly, the rest of the document is) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 406.00 Td (premature.) Tj ET
+BT 0.137 0.196 0.188 rg /F2 13.5 Tf 72.00 369.00 Td (2. Goals and non-goals) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 349.00 Td (List what the work will achieve and, just as importantly, what it will not. Non-goals prevent) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 333.00 Td (scope creep and settle debates before they start. A short example for a document library:) Tj ET
+BT 0.835 0.647 0.592 rg /F1 11 Tf 76.00 309.00 Td (-) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 90.00 309.00 Td (Goal: readers can open any PDF in the library on a phone without downloading it.) Tj ET
+BT 0.835 0.647 0.592 rg /F1 11 Tf 76.00 290.00 Td (-) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 90.00 290.00 Td (Goal: a document's first page appears in under two seconds on a typical 4G connection.) Tj ET
+BT 0.835 0.647 0.592 rg /F1 11 Tf 76.00 271.00 Td (-) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 90.00 271.00 Td (Non-goal: editing or annotating PDFs.) Tj ET
+BT 0.835 0.647 0.592 rg /F1 11 Tf 76.00 252.00 Td (-) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 90.00 252.00 Td (Non-goal: offline access.) Tj ET
+BT 0.137 0.196 0.188 rg /F2 13.5 Tf 72.00 214.00 Td (3. The proposed design) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 194.00 Td (Describe the approach at the level of components and data flow, not individual functions.) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 178.00 Td (Include one diagram if it helps, and show the data model explicitly. Reviewers catch more) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 162.00 Td (problems in a table definition than in a paragraph of prose.) Tj ET
+0.722 0.765 0.741 RG 0.75 w 72 60 m 540 60 l S
+BT 0.365 0.431 0.412 rg /F1 9 Tf 72 46 Td (Writing Technical Specifications) Tj ET
+BT 0.365 0.431 0.412 rg /F1 9 Tf 492.58 46 Td (Page 1 of 2) Tj ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 7 0 R >>
+endobj
+9 0 obj
+<< /Length 3873 >>
+stream
+0.906 0.886 0.863 rg 72 611.00 468 105 re f
+BT 0.137 0.196 0.188 rg /F3 10 Tf 80.00 699.00 Td (CREATE TABLE documents \() Tj ET
+BT 0.137 0.196 0.188 rg /F3 10 Tf 80.00 686.00 Td (  id          TEXT PRIMARY KEY,) Tj ET
+BT 0.137 0.196 0.188 rg /F3 10 Tf 80.00 673.00 Td (  title       TEXT NOT NULL,) Tj ET
+BT 0.137 0.196 0.188 rg /F3 10 Tf 80.00 660.00 Td (  file_url    TEXT NOT NULL,) Tj ET
+BT 0.137 0.196 0.188 rg /F3 10 Tf 80.00 647.00 Td (  page_count  INTEGER,) Tj ET
+BT 0.137 0.196 0.188 rg /F3 10 Tf 80.00 634.00 Td (  created_at  TEXT NOT NULL) Tj ET
+BT 0.137 0.196 0.188 rg /F3 10 Tf 80.00 621.00 Td (\);) Tj ET
+BT 0.137 0.196 0.188 rg /F2 13.5 Tf 72.00 572.00 Td (4. Alternatives considered) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 552.00 Td (For each serious alternative, write a short paragraph on why it was rejected. This is the) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 536.00 Td (section future readers value most, because it answers the question every newcomer) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 520.00 Td (eventually asks: why did we not just do it the obvious way?) Tj ET
+BT 0.137 0.196 0.188 rg /F2 13.5 Tf 72.00 483.00 Td (5. Risks and open questions) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 463.00 Td (Be honest about what you do not know. An open question written down invites the right) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 447.00 Td (person to answer it; an open question left out invites a surprise in production.) Tj ET
+BT 0.835 0.647 0.592 rg /F1 11 Tf 76.00 423.00 Td (-) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 90.00 423.00 Td (What happens to existing links when a document is renamed?) Tj ET
+BT 0.835 0.647 0.592 rg /F1 11 Tf 76.00 404.00 Td (-) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 90.00 404.00 Td (Who can publish, and how is that access granted?) Tj ET
+BT 0.835 0.647 0.592 rg /F1 11 Tf 76.00 385.00 Td (-) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 90.00 385.00 Td (What is the largest file we need to support?) Tj ET
+BT 0.137 0.196 0.188 rg /F2 13.5 Tf 72.00 347.00 Td (6. Rollout and rollback) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 327.00 Td (Explain how the change reaches users: feature flags, migration steps, and how to undo them.) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 311.00 Td (A plan that cannot be reversed deserves extra review before anyone starts building it.) Tj ET
+BT 0.137 0.196 0.188 rg /F2 13.5 Tf 72.00 274.00 Td (A checklist before sharing) Tj ET
+BT 0.835 0.647 0.592 rg /F1 11 Tf 76.00 254.00 Td (-) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 90.00 254.00 Td (The problem statement fits in three sentences.) Tj ET
+BT 0.835 0.647 0.592 rg /F1 11 Tf 76.00 235.00 Td (-) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 90.00 235.00 Td (Every goal is measurable.) Tj ET
+BT 0.835 0.647 0.592 rg /F1 11 Tf 76.00 216.00 Td (-) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 90.00 216.00 Td (Non-goals are listed.) Tj ET
+BT 0.835 0.647 0.592 rg /F1 11 Tf 76.00 197.00 Td (-) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 90.00 197.00 Td (At least one alternative is described and rejected with reasons.) Tj ET
+BT 0.835 0.647 0.592 rg /F1 11 Tf 76.00 178.00 Td (-) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 90.00 178.00 Td (Each open question names who should answer it.) Tj ET
+BT 0.835 0.647 0.592 rg /F1 11 Tf 76.00 159.00 Td (-) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 90.00 159.00 Td (The document can be read in under fifteen minutes.) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 134.00 Td (A specification is a tool for thinking together. Its success is measured by the quality of the) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 118.00 Td (conversation it starts, not by its length.) Tj ET
+0.722 0.765 0.741 RG 0.75 w 72 60 m 540 60 l S
+BT 0.365 0.431 0.412 rg /F1 9 Tf 72 46 Td (Writing Technical Specifications) Tj ET
+BT 0.365 0.431 0.412 rg /F1 9 Tf 492.58 46 Td (Page 2 of 2) Tj ET
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 9 0 R >>
+endobj
+xref
+0 11
+0000000000 65535 f
+0000000015 00000 n
+0000000064 00000 n
+0000000128 00000 n
+0000000225 00000 n
+0000000327 00000 n
+0000000422 00000 n
+0000000532 00000 n
+0000004042 00000 n
+0000004188 00000 n
+0000008113 00000 n
+trailer
+<< /Size 11 /Root 1 0 R /Info 6 0 R >>
+startxref
+8260
+%%EOF

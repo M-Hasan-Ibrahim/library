@@ -1,0 +1,121 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [8 0 R 10 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>
+endobj
+6 0 obj
+<< /Title (Gradient Descent: Lecture Notes) /Author (Mohamad Hassan Ibrahim) >>
+endobj
+7 0 obj
+<< /Length 3511 >>
+stream
+BT 0.137 0.196 0.188 rg /F2 22 Tf 72.00 694.00 Td (Gradient Descent: Lecture Notes) Tj ET
+BT 0.365 0.431 0.412 rg /F1 12 Tf 72.00 674.00 Td (Optimisation for machine learning, from first principles) Tj ET
+BT 0.365 0.431 0.412 rg /F1 10 Tf 72.00 658.00 Td (Mohamad Hassan Ibrahim - Artificial Intelligence notes) Tj ET
+0.835 0.647 0.592 RG 2 w 72 644.00 m 540 644.00 l S
+BT 0.137 0.196 0.188 rg /F2 13.5 Tf 72.00 605.00 Td (1. The problem) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 585.00 Td (Training a model means finding parameters that make a loss function small. For a parameter) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 569.00 Td (vector w and a loss L\(w\), we look for the w that minimises L. For most models there is no) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 553.00 Td (closed-form solution, so we search iteratively.) Tj ET
+BT 0.137 0.196 0.188 rg /F2 13.5 Tf 72.00 516.00 Td (2. The update rule) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 496.00 Td (The gradient of L points in the direction of steepest increase of the loss. Gradient descent) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 480.00 Td (takes a small step in the opposite direction:) Tj ET
+0.906 0.886 0.863 rg 72 441.00 468 27 re f
+BT 0.137 0.196 0.188 rg /F3 10 Tf 80.00 451.00 Td (w\(t+1\) = w\(t\) - eta * grad L\(w\(t\)\)) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 415.00 Td (Here eta > 0 is the learning rate. Repeating this update moves w downhill until the gradient is) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 399.00 Td (close to zero.) Tj ET
+BT 0.137 0.196 0.188 rg /F2 13.5 Tf 72.00 362.00 Td (3. A one-dimensional example) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 342.00 Td (Let L\(w\) = \(w - 3\)^2, so the derivative is L'\(w\) = 2\(w - 3\) and the minimum is at w = 3. Starting) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 326.00 Td (from w = 0 with eta = 0.1:) Tj ET
+0.906 0.886 0.863 rg 72 235.00 468 79 re f
+BT 0.137 0.196 0.188 rg /F3 10 Tf 80.00 297.00 Td (t   w\(t\)     L'\(w\(t\)\)   w\(t+1\)) Tj ET
+BT 0.137 0.196 0.188 rg /F3 10 Tf 80.00 284.00 Td (0   0.0000   -6.0000    0.6000) Tj ET
+BT 0.137 0.196 0.188 rg /F3 10 Tf 80.00 271.00 Td (1   0.6000   -4.8000    1.0800) Tj ET
+BT 0.137 0.196 0.188 rg /F3 10 Tf 80.00 258.00 Td (2   1.0800   -3.8400    1.4640) Tj ET
+BT 0.137 0.196 0.188 rg /F3 10 Tf 80.00 245.00 Td (3   1.4640   -3.0720    1.7712) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 209.00 Td (Each step closes 20% of the remaining distance to the minimum, because w\(t\) - 3 = 0.8^t * \(0) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 193.00 Td (- 3\). After 20 steps w is about 2.965.) Tj ET
+BT 0.137 0.196 0.188 rg /F2 13.5 Tf 72.00 156.00 Td (4. Choosing the learning rate) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 136.00 Td (For this loss, every update multiplies the error w - 3 by \(1 - 2 * eta\). The iteration therefore) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 120.00 Td (converges when |1 - 2 * eta| < 1, that is when 0 < eta < 1. With eta = 0.5 it reaches the) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 104.00 Td (minimum in a single step. With eta = 1 the error flips sign without shrinking, so w alternates) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 88.00 Td (between 0 and 6. With eta > 1 the error grows and the method diverges.) Tj ET
+0.722 0.765 0.741 RG 0.75 w 72 60 m 540 60 l S
+BT 0.365 0.431 0.412 rg /F1 9 Tf 72 46 Td (Gradient Descent: Lecture Notes) Tj ET
+BT 0.365 0.431 0.412 rg /F1 9 Tf 492.58 46 Td (Page 1 of 2) Tj ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 7 0 R >>
+endobj
+9 0 obj
+<< /Length 3266 >>
+stream
+BT 0.835 0.647 0.592 rg /F1 11 Tf 76.00 704.00 Td (-) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 90.00 704.00 Td (Too small: progress is slow and training is expensive.) Tj ET
+BT 0.835 0.647 0.592 rg /F1 11 Tf 76.00 685.00 Td (-) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 90.00 685.00 Td (Too large: the loss oscillates or diverges.) Tj ET
+BT 0.835 0.647 0.592 rg /F1 11 Tf 76.00 666.00 Td (-) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 90.00 666.00 Td (In practice: try values on a logarithmic scale such as 0.1, 0.01 and 0.001, and watch the) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 90.00 650.00 Td (training loss.) Tj ET
+BT 0.137 0.196 0.188 rg /F2 13.5 Tf 72.00 612.00 Td (5. Stochastic and mini-batch variants) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 592.00 Td (When the loss is an average over n training examples, computing the full gradient costs O\(n\)) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 576.00 Td (per step. Stochastic gradient descent \(SGD\) estimates the gradient from a single example,) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 560.00 Td (and mini-batch gradient descent from a small batch, typically between 32 and 512 examples.) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 544.00 Td (The estimate is noisy, but each step is far cheaper, and the noise can help the search move) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 528.00 Td (past flat regions and shallow local minima.) Tj ET
+BT 0.137 0.196 0.188 rg /F2 13.5 Tf 72.00 491.00 Td (6. Momentum) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 471.00 Td (Momentum keeps a running velocity v that accumulates past gradients:) Tj ET
+0.906 0.886 0.863 rg 72 419.00 468 40 re f
+BT 0.137 0.196 0.188 rg /F3 10 Tf 80.00 442.00 Td (v\(t+1\) = beta * v\(t\) + grad L\(w\(t\)\)) Tj ET
+BT 0.137 0.196 0.188 rg /F3 10 Tf 80.00 429.00 Td (w\(t+1\) = w\(t\) - eta * v\(t+1\)) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 393.00 Td (A typical value is beta = 0.9. Momentum speeds up progress along directions where the) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 377.00 Td (gradient is consistent and damps oscillations across narrow valleys. Adaptive methods such) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 72.00 361.00 Td (as Adam extend the same idea with a separate step size for each parameter.) Tj ET
+BT 0.137 0.196 0.188 rg /F2 13.5 Tf 72.00 324.00 Td (Summary) Tj ET
+BT 0.835 0.647 0.592 rg /F1 11 Tf 76.00 304.00 Td (-) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 90.00 304.00 Td (Gradient descent repeatedly steps against the gradient.) Tj ET
+BT 0.835 0.647 0.592 rg /F1 11 Tf 76.00 285.00 Td (-) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 90.00 285.00 Td (The learning rate controls stability as much as speed.) Tj ET
+BT 0.835 0.647 0.592 rg /F1 11 Tf 76.00 266.00 Td (-) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 90.00 266.00 Td (Mini-batches trade gradient accuracy for many more updates per second.) Tj ET
+BT 0.835 0.647 0.592 rg /F1 11 Tf 76.00 247.00 Td (-) Tj ET
+BT 0.137 0.196 0.188 rg /F1 11 Tf 90.00 247.00 Td (Momentum and adaptive methods are refinements of the same core rule.) Tj ET
+0.722 0.765 0.741 RG 0.75 w 72 60 m 540 60 l S
+BT 0.365 0.431 0.412 rg /F1 9 Tf 72 46 Td (Gradient Descent: Lecture Notes) Tj ET
+BT 0.365 0.431 0.412 rg /F1 9 Tf 492.58 46 Td (Page 2 of 2) Tj ET
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 9 0 R >>
+endobj
+xref
+0 11
+0000000000 65535 f
+0000000015 00000 n
+0000000064 00000 n
+0000000128 00000 n
+0000000225 00000 n
+0000000327 00000 n
+0000000422 00000 n
+0000000517 00000 n
+0000004080 00000 n
+0000004226 00000 n
+0000007544 00000 n
+trailer
+<< /Size 11 /Root 1 0 R /Info 6 0 R >>
+startxref
+7691
+%%EOF

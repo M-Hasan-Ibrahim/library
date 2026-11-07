@@ -1,0 +1,27 @@
+{
+  "blocks": [
+    { "id": "b01", "type": "heading", "level": 2, "text": "The classic example" },
+    {
+      "id": "b02",
+      "type": "paragraph",
+      "text": "How many piano tuners work in Chicago? Nobody knows the answer offhand, but a chain of rough guesses gets surprisingly close:"
+    },
+    {
+      "id": "b03",
+      "type": "list",
+      "ordered": true,
+      "items": [
+        "About 3 million people live in Chicago, roughly 2 per household: **1.5 million households**.",
+        "Perhaps 1 household in 20 owns a piano: **about 75,000 pianos**.",
+        "Each piano is tuned about once a year: **75,000 tunings a year**.",
+        "A tuner can do about 4 a day, 250 days a year: **1,000 tunings per tuner**.",
+        "So Chicago needs roughly **75 piano tuners**."
+      ]
+    },
+    {
+      "id": "b04",
+      "type": "paragraph",
+      "text": "Each guess may be off, but the errors tend to cancel out, and the answer is very likely in the right order of magnitude. That is the real lesson: an honest estimate beats no estimate."
+    }
+  ]
+}

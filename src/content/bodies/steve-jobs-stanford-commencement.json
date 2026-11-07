@@ -1,0 +1,15 @@
+{
+  "blocks": [
+    { "id": "b01", "type": "heading", "level": 2, "text": "What stays with me" },
+    {
+      "id": "b02",
+      "type": "paragraph",
+      "text": "The first story is the one I return to most: you cannot connect the dots looking forward, only looking back. Studying several specialisations before choosing software engineering felt scattered at the time. In hindsight, each one added something."
+    },
+    {
+      "id": "b03",
+      "type": "quote",
+      "text": "You can't connect the dots looking forward; you can only connect them looking backwards."
+    }
+  ]
+}

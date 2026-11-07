@@ -1,0 +1,188 @@
+[
+  {
+    "id": "itm_rainbow",
+    "slug": "how-a-rainbow-forms",
+    "type": "article",
+    "categoryId": "cat_science",
+    "language": "ar",
+    "title": "كيف يتشكّل قوس قزح؟",
+    "description": "لماذا نرى قوس قزح دائمًا في الجهة المقابلة للشمس، ولماذا يكون على شكل قوس؟ شرح مبسّط للانكسار والتشتّت والانعكاس داخل قطرات المطر.",
+    "tags": ["rainbow", "light", "physics", "optics", "قوس قزح", "ضوء", "فيزياء"],
+    "addedAt": "2026-11-02",
+    "updatedAt": "2026-11-02",
+    "readingMinutes": 2,
+    "links": [
+      { "label": "قوس قزح على ويكيبيديا", "url": "https://ar.wikipedia.org/wiki/%D9%82%D9%88%D8%B3_%D9%82%D8%B2%D8%AD" }
+    ]
+  },
+  {
+    "id": "itm_neural_network_video",
+    "slug": "but-what-is-a-neural-network",
+    "type": "youtube",
+    "categoryId": "cat_science",
+    "language": "en",
+    "title": "But What Is a Neural Network?",
+    "description": "3Blue1Brown's visual introduction to how a neural network recognises handwritten digits, built up from neurons, layers, weights and biases.",
+    "tags": ["neural networks", "machine learning", "deep learning", "3Blue1Brown", "AI"],
+    "addedAt": "2026-10-28",
+    "updatedAt": "2026-10-28",
+    "videoUrl": "https://www.youtube.com/watch?v=aircAruvnKk",
+    "links": [
+      { "label": "3Blue1Brown", "url": "https://www.3blue1brown.com/" }
+    ]
+  },
+  {
+    "id": "itm_fermi_problems",
+    "slug": "fermi-problems",
+    "type": "link",
+    "categoryId": "cat_science",
+    "language": "en",
+    "title": "Fermi Problems",
+    "description": "Estimating seemingly impossible quantities, like the number of piano tuners in Chicago, with nothing but reasonable assumptions and orders of magnitude.",
+    "tags": ["estimation", "physics", "problem solving", "Enrico Fermi"],
+    "addedAt": "2026-10-21",
+    "updatedAt": "2026-10-21",
+    "url": "https://en.wikipedia.org/wiki/Fermi_problem"
+  },
+  {
+    "id": "itm_precision_recall",
+    "slug": "precision-and-recall-without-the-confusion",
+    "type": "article",
+    "categoryId": "cat_science",
+    "language": "en",
+    "title": "Precision and Recall Without the Confusion",
+    "description": "Why accuracy misleads on imbalanced data, how precision, recall and F1 differ, and a worked spam-filter example.",
+    "tags": ["machine learning", "statistics", "evaluation", "metrics"],
+    "addedAt": "2026-10-14",
+    "updatedAt": "2026-10-14",
+    "readingMinutes": 3,
+    "links": [
+      { "label": "Precision and recall on Wikipedia", "url": "https://en.wikipedia.org/wiki/Precision_and_recall" }
+    ]
+  },
+  {
+    "id": "itm_goalkeeping",
+    "slug": "what-goalkeeping-taught-me",
+    "type": "article",
+    "categoryId": "cat_personal",
+    "language": "ar",
+    "title": "ما علّمتني إياه حراسة المرمى",
+    "description": "في كرة القدم لا يتذكّر أحدٌ الحارس إلا عندما يخطئ. ملاحظات قصيرة عن الضغط والتركيز والمسؤولية.",
+    "tags": ["football", "goalkeeping", "sport", "focus", "كرة القدم", "حراسة المرمى", "رياضة"],
+    "addedAt": "2026-10-09",
+    "updatedAt": "2026-10-09",
+    "readingMinutes": 1
+  },
+  {
+    "id": "itm_git_internals",
+    "slug": "how-git-stores-your-code",
+    "type": "article",
+    "categoryId": "cat_other",
+    "language": "en",
+    "title": "How Git Stores Your Code",
+    "description": "Blobs, trees, commits and references: the small data model behind Git, and why it makes history easier to reason about.",
+    "tags": ["Git", "version control", "programming"],
+    "addedAt": "2026-10-03",
+    "updatedAt": "2026-10-03",
+    "readingMinutes": 3
+  },
+  {
+    "id": "itm_jobs_commencement",
+    "slug": "steve-jobs-stanford-commencement",
+    "type": "youtube",
+    "categoryId": "cat_thoughts",
+    "language": "en",
+    "title": "Steve Jobs' 2005 Stanford Commencement Address",
+    "description": "Three short stories about connecting the dots, love and loss, and death, from the speech Steve Jobs gave to Stanford graduates in 2005.",
+    "tags": ["speech", "career", "life", "Stanford", "inspiration"],
+    "addedAt": "2026-09-26",
+    "updatedAt": "2026-09-26",
+    "videoUrl": "https://youtu.be/UF8uR6Z6KLc",
+    "links": [
+      { "label": "Full transcript (Stanford Report)", "url": "https://news.stanford.edu/stories/2005/06/youve-got-find-love-jobs-says" }
+    ]
+  },
+  {
+    "id": "itm_gradient_descent",
+    "slug": "gradient-descent-lecture-notes",
+    "type": "pdf",
+    "categoryId": "cat_science",
+    "language": "en",
+    "title": "Gradient Descent: Lecture Notes",
+    "description": "The update rule, a fully worked one-dimensional example, choosing a learning rate, mini-batches, and momentum.",
+    "tags": ["optimisation", "machine learning", "mathematics", "SGD"],
+    "addedAt": "2026-09-21",
+    "updatedAt": "2026-09-21",
+    "fileUrl": "documents/gradient-descent-lecture-notes.pdf",
+    "pageCount": 2
+  },
+  {
+    "id": "itm_apod",
+    "slug": "astronomy-picture-of-the-day",
+    "type": "link",
+    "categoryId": "cat_interesting_finds",
+    "language": "en",
+    "title": "Astronomy Picture of the Day",
+    "description": "Every day since 1995, NASA has published one image of the universe with a short explanation written by a professional astronomer.",
+    "tags": ["space", "astronomy", "NASA", "photography"],
+    "addedAt": "2026-09-15",
+    "updatedAt": "2026-09-15",
+    "url": "https://apod.nasa.gov/apod/"
+  },
+  {
+    "id": "itm_calm_interfaces",
+    "slug": "designing-interfaces-that-feel-calm",
+    "type": "article",
+    "categoryId": "cat_thoughts",
+    "language": "en",
+    "title": "Designing Interfaces That Feel Calm",
+    "description": "Four habits that make software feel calm: showing less at once, making state obvious, preferring stillness, and staying predictable.",
+    "tags": ["design", "UX", "software", "accessibility"],
+    "addedAt": "2026-09-12",
+    "updatedAt": "2026-09-12",
+    "readingMinutes": 2
+  },
+  {
+    "id": "itm_the_egg",
+    "slug": "the-egg-a-short-story",
+    "type": "youtube",
+    "categoryId": "cat_interesting_finds",
+    "language": "en",
+    "title": "The Egg: A Short Story",
+    "description": "Kurzgesagt's animated adaptation of Andy Weir's short story about life, death, and what it might mean to be everyone.",
+    "tags": ["animation", "philosophy", "Kurzgesagt", "Andy Weir", "story"],
+    "addedAt": "2026-09-02",
+    "updatedAt": "2026-09-02",
+    "videoUrl": "https://www.youtube.com/watch?v=h6fcK_fRYaI"
+  },
+  {
+    "id": "itm_tech_specs",
+    "slug": "writing-technical-specifications",
+    "type": "pdf",
+    "categoryId": "cat_other",
+    "language": "en",
+    "title": "Writing Technical Specifications That Get Read",
+    "description": "A practical structure for design documents: problem, goals and non-goals, design, alternatives, risks, and rollout.",
+    "tags": ["writing", "documentation", "teamwork"],
+    "addedAt": "2026-08-29",
+    "updatedAt": "2026-08-29",
+    "fileUrl": "documents/writing-technical-specifications.pdf",
+    "pageCount": 2
+  },
+  {
+    "id": "itm_fitts_law",
+    "slug": "fitts-law-in-everyday-interfaces",
+    "type": "article",
+    "categoryId": "cat_science",
+    "language": "en",
+    "title": "Fitts's Law in Everyday Interfaces",
+    "description": "The seventy-year-old formula from psychology that explains why big, nearby buttons feel effortless, with a quick worked example.",
+    "tags": ["psychology", "HCI", "design", "pointing"],
+    "addedAt": "2026-08-16",
+    "updatedAt": "2026-08-16",
+    "readingMinutes": 2,
+    "links": [
+      { "label": "Fitts's law on Wikipedia", "url": "https://en.wikipedia.org/wiki/Fitts%27s_law" }
+    ]
+  }
+]

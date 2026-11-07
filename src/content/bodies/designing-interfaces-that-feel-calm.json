@@ -1,0 +1,68 @@
+{
+  "blocks": [
+    {
+      "id": "b01",
+      "type": "paragraph",
+      "text": "Some software leaves you feeling capable. Other software leaves you slightly anxious even when it works. The difference is rarely a single feature; it is the accumulation of small decisions about what to show, when to show it, and how loudly."
+    },
+    {
+      "id": "b02",
+      "type": "heading",
+      "level": 2,
+      "text": "Show less at once"
+    },
+    {
+      "id": "b03",
+      "type": "paragraph",
+      "text": "Every visible element competes for attention. A calm interface shows what the current task needs and keeps the rest one step away. *Progressive disclosure*, revealing advanced options only when someone asks for them, keeps the first impression simple without taking power away from experienced users."
+    },
+    {
+      "id": "b04",
+      "type": "heading",
+      "level": 2,
+      "text": "Make state obvious"
+    },
+    {
+      "id": "b05",
+      "type": "paragraph",
+      "text": "Anxiety often comes from uncertainty. Did my change save? Is it still loading? What happens if I press this? Clear labels, visible confirmation after an action, and honest loading and empty states answer those questions before anyone has to ask them."
+    },
+    {
+      "id": "b06",
+      "type": "heading",
+      "level": 2,
+      "text": "Prefer stillness"
+    },
+    {
+      "id": "b07",
+      "type": "paragraph",
+      "text": "Motion is powerful because the eye cannot ignore it, which is exactly why too much of it is tiring. Reserve movement for moments that genuinely need attention, and respect the operating system's reduced motion setting for people who are sensitive to it."
+    },
+    {
+      "id": "b08",
+      "type": "heading",
+      "level": 2,
+      "text": "Be predictable"
+    },
+    {
+      "id": "b09",
+      "type": "list",
+      "ordered": false,
+      "items": [
+        "The same action should look the same everywhere in the product.",
+        "Buttons should say what they do: **Save changes** is clearer than **OK**.",
+        "Destructive actions deserve a pause and a clear way back."
+      ]
+    },
+    {
+      "id": "b10",
+      "type": "quote",
+      "text": "Calm design is not the same as minimal design. It is design in which nothing surprises the person using it."
+    },
+    {
+      "id": "b11",
+      "type": "paragraph",
+      "text": "A useful test is to watch someone use your product without explaining anything. Every moment of hesitation marks a place where the interface could have been quieter or clearer."
+    }
+  ]
+}

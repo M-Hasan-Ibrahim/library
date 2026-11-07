@@ -1,0 +1,37 @@
+[
+  {
+    "id": "cat_science",
+    "slug": "science",
+    "name": "Science",
+    "description": "How the world works, from light and numbers to the ideas behind modern AI.",
+    "position": 1
+  },
+  {
+    "id": "cat_thoughts",
+    "slug": "thoughts",
+    "name": "Thoughts",
+    "description": "Reflections and ideas worth coming back to.",
+    "position": 2
+  },
+  {
+    "id": "cat_interesting_finds",
+    "slug": "interesting-finds",
+    "name": "Interesting Finds",
+    "description": "Videos, sites and discoveries that were too good not to keep.",
+    "position": 3
+  },
+  {
+    "id": "cat_personal",
+    "slug": "personal",
+    "name": "Personal",
+    "description": "Notes from my own life, outside of work.",
+    "position": 4
+  },
+  {
+    "id": "cat_other",
+    "slug": "other",
+    "name": "Other",
+    "description": "Everything that does not fit neatly anywhere else.",
+    "position": 5
+  }
+]

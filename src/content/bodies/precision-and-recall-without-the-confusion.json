@@ -1,0 +1,113 @@
+{
+  "blocks": [
+    {
+      "id": "b01",
+      "type": "paragraph",
+      "text": "Accuracy is the first metric most people reach for, and it is often the wrong one. If 2% of transactions are fraudulent, a model that labels every transaction as legitimate is 98% accurate and *completely useless*. Precision and recall exist to describe what accuracy hides."
+    },
+    {
+      "id": "b02",
+      "type": "heading",
+      "level": 2,
+      "text": "The confusion matrix"
+    },
+    {
+      "id": "b03",
+      "type": "paragraph",
+      "text": "For a binary classifier, every prediction falls into one of four groups:"
+    },
+    {
+      "id": "b04",
+      "type": "list",
+      "ordered": false,
+      "items": [
+        "True positive (TP): predicted positive, actually positive.",
+        "False positive (FP): predicted positive, actually negative.",
+        "False negative (FN): predicted negative, actually positive.",
+        "True negative (TN): predicted negative, actually negative."
+      ]
+    },
+    {
+      "id": "b05",
+      "type": "heading",
+      "level": 2,
+      "text": "Two different questions"
+    },
+    {
+      "id": "b06",
+      "type": "paragraph",
+      "text": "**Precision** answers the question: when the model says positive, how often is it right? **Recall** answers a different one: of all the real positives, how many did the model find? The **F1 score** combines both as their harmonic mean."
+    },
+    {
+      "id": "b07",
+      "type": "code",
+      "language": "text",
+      "text": "precision = TP / (TP + FP)\nrecall    = TP / (TP + FN)\nF1        = 2 × precision × recall / (precision + recall)"
+    },
+    {
+      "id": "b08",
+      "type": "heading",
+      "level": 2,
+      "text": "A worked example"
+    },
+    {
+      "id": "b09",
+      "type": "paragraph",
+      "text": "Imagine a spam filter tested on 100 emails, 20 of which are spam. The filter flags 25 emails, and 15 of those are genuinely spam."
+    },
+    {
+      "id": "b10",
+      "type": "list",
+      "ordered": false,
+      "items": [
+        "TP = 15: spam correctly flagged.",
+        "FP = 10: legitimate emails sent to the spam folder.",
+        "FN = 5: spam that reached the inbox.",
+        "TN = 70: legitimate emails correctly delivered."
+      ]
+    },
+    {
+      "id": "b11",
+      "type": "paragraph",
+      "text": "Precision is 15 / 25 = 0.60 and recall is 15 / 20 = 0.75, so F1 is 2 × 0.60 × 0.75 / 1.35 ≈ 0.67. Accuracy is (15 + 70) / 100 = 0.85, which sounds respectable but says nothing about the ten real emails that disappeared into the spam folder."
+    },
+    {
+      "id": "b11a",
+      "type": "details",
+      "summary": "Why a harmonic mean instead of a simple average?",
+      "blocks": [
+        {
+          "id": "b11b",
+          "type": "paragraph",
+          "text": "The harmonic mean is pulled towards the smaller of the two values. A model with precision 1.0 and recall 0.02 has an ordinary average of 0.51, which looks acceptable, but an F1 score of about 0.04, which correctly says that the model finds almost nothing."
+        }
+      ]
+    },
+    {
+      "id": "b12",
+      "type": "heading",
+      "level": 2,
+      "text": "Choosing what to optimise"
+    },
+    {
+      "id": "b13",
+      "type": "paragraph",
+      "text": "Most classifiers output a score, and a threshold turns that score into a decision. Raising the threshold usually increases precision and lowers recall; lowering it does the opposite. The right balance depends on the cost of each kind of mistake."
+    },
+    {
+      "id": "b14",
+      "type": "list",
+      "ordered": false,
+      "items": [
+        "Medical screening favours recall: missing a case is worse than ordering an extra test.",
+        "Spam filtering favours precision: losing an important email is worse than seeing an occasional advert.",
+        "Search ranking often measures precision among the top few results, because people rarely scroll far."
+      ]
+    },
+    {
+      "id": "b15",
+      "type": "quote",
+      "text": "Before choosing a metric, write down what a false positive costs and what a false negative costs. The metric usually chooses itself."
+    }
+  ]
+}

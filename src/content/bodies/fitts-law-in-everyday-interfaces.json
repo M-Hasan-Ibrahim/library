@@ -1,0 +1,64 @@
+{
+  "blocks": [
+    {
+      "id": "b01",
+      "type": "paragraph",
+      "text": "In 1954 the psychologist Paul Fitts showed that the time needed to point at a target depends on two things: how far away it is and how big it is. More than seventy years later, the same relationship explains why some buttons feel effortless and others feel fiddly."
+    },
+    {
+      "id": "b02",
+      "type": "heading",
+      "level": 2,
+      "text": "The formula"
+    },
+    {
+      "id": "b03",
+      "type": "paragraph",
+      "text": "The version most often used in human-computer interaction is the Shannon formulation, popularised by Scott MacKenzie:"
+    },
+    {
+      "id": "b04",
+      "type": "code",
+      "language": "text",
+      "text": "MT = a + b × log2(D / W + 1)"
+    },
+    {
+      "id": "b05",
+      "type": "paragraph",
+      "text": "MT is the movement time, D is the distance to the centre of the target, W is the width of the target along the direction of movement, and a and b are constants measured for a particular device and user. The logarithmic term is called the **index of difficulty** and is measured in bits."
+    },
+    {
+      "id": "b06",
+      "type": "heading",
+      "level": 2,
+      "text": "A quick example"
+    },
+    {
+      "id": "b07",
+      "type": "paragraph",
+      "text": "Moving 400 pixels to a button 20 pixels wide gives an index of difficulty of log2(400 / 20 + 1) = log2(21) ≈ 4.39 bits. Widening the button to 80 pixels reduces it to log2(6) ≈ 2.58 bits. The constants decide how many milliseconds that saves, but the direction never changes: the wider target is easier to hit."
+    },
+    {
+      "id": "b08",
+      "type": "heading",
+      "level": 2,
+      "text": "What it means in practice"
+    },
+    {
+      "id": "b09",
+      "type": "list",
+      "ordered": false,
+      "items": [
+        "Bigger targets are faster to hit, which matters most on touch screens.",
+        "Closer targets are faster to reach, so place related actions near where attention already is.",
+        "Screen edges behave like infinitely deep targets for a mouse, because the pointer stops at the edge. That is why menus along the very top of the screen are quick to reach.",
+        "Tightly packed small targets increase errors, not just time."
+      ]
+    },
+    {
+      "id": "b10",
+      "type": "paragraph",
+      "text": "Fitts's law does not cover everything. It describes pointing, not reading, deciding, or remembering. But whenever an interface asks someone to move a pointer or a finger to a target, it is a reliable guide."
+    }
+  ]
+}
