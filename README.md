@@ -100,14 +100,110 @@ src/
   styles/tokens.css            Exact portfolio palette
   styles/library.css           Layout (no motion)
   styles/panel.css             The panel and its two animations
-db/schema.sql                  Target Cloudflare D1 schema (not used yet)
+worker/src/index.js            Read-only API Worker: routing, CORS, responses
+worker/src/content.js          D1 queries (bound parameters only) and JSON mapping
+wrangler.jsonc                 Worker + D1 configuration (binding DB -> library-db)
+migrations/                    Versioned Cloudflare D1 migrations (source of truth)
+db/schema.sql                  Reference snapshot of the D1 schema (do not execute)
+db/seed.sql                    One-time import of the 13 items (already loaded)
 ```
+
+## Read-only API (Cloudflare Worker)
+
+| Endpoint | Response (same shapes as `src/content/`) |
+| -------- | ---------------------------------------- |
+| `GET /api/library` | `{ categories, languages, items }` — used by the site, one request |
+| `GET /api/categories` | `categories.json` |
+| `GET /api/languages` | `languages.json` |
+| `GET /api/items` | `items.json` (without bodies) |
+| `GET /api/items/:slug` | one `items.json` entry plus `blocks` (rich text, `[]` if none) |
+
+Only `GET`/`HEAD`/`OPTIONS`; anything else is `405`. Unknown paths and
+invalid slugs are `404`. Browser access (CORS) is limited to the origins in
+`ALLOWED_ORIGINS` (`wrangler.jsonc`).
+
+### Run it locally
+
+```bash
+# 1. A local copy of the database (stored in .wrangler/, never production)
+npx wrangler@4 d1 migrations apply library-db --local
+npx wrangler@4 d1 execute library-db --local --file=db/seed.sql
+
+# 2. The Worker on http://127.0.0.1:8787, allowing the Vite dev server
+npx wrangler@4 dev --local --var "ALLOWED_ORIGINS:http://127.0.0.1:5173"
+
+# 3. The site, reading from the local Worker
+npm run dev
+```
+
+For step 3, first create a file named `.env.local` (gitignored) in the project
+root containing this single line:
+
+```
+VITE_LIBRARY_API_URL=http://127.0.0.1:8787
+```
+
+Delete `.env.local` to go back to the bundled JSON.
+
+### Data source switch
+
+The site reads the API only when it is built with `VITE_LIBRARY_API_URL`.
+Without it (the current GitHub Pages build) it uses the bundled JSON. When the
+API is set but unreachable or returns an error, the site falls back to the
+bundled JSON and logs a console warning.
+
+The deploy workflow passes the GitHub repository variable `LIBRARY_API_URL`
+to the build. To switch the live site to D1, create that variable
+(Settings → Secrets and variables → Actions → Variables) with the value
+`https://api.library.mh-ibrahim.com` and re-run the workflow. Delete it to
+switch back.
+
+### Deploy the Worker
+
+Public address: `https://api.library.mh-ibrahim.com` (Custom Domain;
+`workers.dev` and preview URLs are disabled in `wrangler.jsonc`). Workers Logs
+(`observability`) are enabled: error details appear only in the Cloudflare
+dashboard (Workers → library-api → Logs), never in API responses.
+
+The hostname has a CAA record (`0 issue "pki.goog"`) in the `mh-ibrahim.com`
+DNS zone. Without it, certificate issuance inherits GitHub's CAA policy through
+the `library` CNAME, which does not allow Cloudflare's certificate authority.
+
+```bash
+npx wrangler@4 deploy --dry-run   # validates and bundles, uploads nothing
+npx wrangler@4 deploy             # publishes a new version of library-api
+npx wrangler@4 deployments list --name library-api
+npx wrangler@4 rollback <version-id>   # return to any previous version
+```
+
+## Database migrations (Cloudflare D1)
+
+The `library-db` schema is managed with numbered files in `migrations/`:
+
+| File | Contents |
+| ---- | -------- |
+| `0001_initial_schema.sql` | `languages`, `categories`, `items` tables and 4 indexes |
+| `0002_seed_languages_and_categories.sql` | 2 languages, 5 categories (same IDs as `src/content/*.json`) |
+
+Both are idempotent (`IF NOT EXISTS`, `INSERT OR IGNORE`), so they are safe on
+a database that already has these objects. Wrangler records applied files in
+the `d1_migrations` table and never runs a recorded file again.
+
+Rules for future changes:
+
+- Never edit a migration that has been applied; add a new numbered file
+  (`npx wrangler d1 migrations create library-db <name>`).
+- Never run `db/schema.sql` against production; update it to match after
+  adding a migration.
+- Apply with `npx wrangler d1 migrations apply library-db --remote` after
+  checking `npx wrangler d1 migrations list library-db --remote`.
 
 ## Roadmap
 
-- **Next: Cloudflare D1 + Workers.** Apply `db/schema.sql`, add `/api/*`, and
-  change only `src/services/libraryRepository.js` to `fetch` it (endpoints are
-  listed at the top of that file).
+- **Next: switch the site to D1.** The Worker is live at
+  `https://api.library.mh-ibrahim.com`; the site still uses the bundled JSON
+  until the `LIBRARY_API_URL` repository variable is created (see
+  "Data source switch").
 - **Then: inline admin editing.** Same pages with small edit controls. The
   pieces are ready for it: every item and text block has a stable `id`; each
   reader section (header, media, text, links) is a separate element;

@@ -34,6 +34,12 @@ jobs:
 
       - name: Build
         run: npm run build
+        env:
+          # Data source switch. Empty (variable not defined) = bundled JSON.
+          # To read from D1, define the repository variable LIBRARY_API_URL
+          # (Settings > Secrets and variables > Actions > Variables), e.g.
+          # https://api.library.mh-ibrahim.com. The site falls back to JSON on errors.
+          VITE_LIBRARY_API_URL: ${{ vars.LIBRARY_API_URL }}
 
       - name: Check build output
         run: |

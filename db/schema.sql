@@ -1,5 +1,10 @@
--- Target Cloudflare D1 (SQLite) schema for a later phase.
--- NOT used yet: the app reads src/content/*.json. Columns map 1:1 to the
+-- REFERENCE SNAPSHOT of the Cloudflare D1 schema (library-db).
+-- The source of truth for changes is migrations/ (applied with
+-- `wrangler d1 migrations apply`). Do NOT execute this file against
+-- production: it bypasses migration tracking. Any schema change must be a
+-- new numbered migration; then update this snapshot to match.
+--
+-- The frontend still reads src/content/*.json. Columns map 1:1 to the
 -- JSON fields (snake_case here, camelCase in the app), so a Worker can return
 -- the exact shapes the UI already consumes.
 --
@@ -7,8 +12,6 @@
 --   categories  = subject (Science, Thoughts, ...)        -> data, editable by admin
 --   languages   = language of the content (en, ar, ...)   -> data
 --   items.type  = how an item is rendered (article, pdf, youtube, link) -> code
---
--- Apply later with:  npx wrangler d1 execute <DB_NAME> --file=db/schema.sql
 
 PRAGMA foreign_keys = ON;
 

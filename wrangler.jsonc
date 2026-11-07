@@ -1,0 +1,35 @@
+// Cloudflare configuration for the Library's D1 database and read-only API Worker.
+// Used by `npx wrangler@4 d1 ...` (migrations) and `npx wrangler@4 dev` /
+// `npx wrangler@4 deploy` (the Worker in worker/). The frontend is deployed
+// separately to GitHub Pages and does not read this file.
+{
+  "name": "library-api",
+  "main": "worker/src/index.js",
+  "compatibility_date": "2026-11-01",
+
+  // Public address: https://api.library.mh-ibrahim.com (Cloudflare Custom
+  // Domain; wrangler creates the DNS record and certificate on deploy).
+  "routes": [{ "pattern": "api.library.mh-ibrahim.com", "custom_domain": true }],
+  // Single public endpoint: no *.workers.dev or per-version preview URLs.
+  "workers_dev": false,
+  "preview_urls": false,
+
+  // Workers Logs: keeps request logs and console.error output (error details
+  // are never sent to clients, only logged). Dashboard: Workers > library-api > Logs.
+  "observability": { "enabled": true },
+
+  "vars": {
+    // Comma-separated origins allowed to read the API from a browser (CORS).
+    // Local development adds its own origins with `--var` (see README).
+    "ALLOWED_ORIGINS": "https://library.mh-ibrahim.com"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "library-db",
+      // Database ID of library-db (an identifier, not a secret).
+      "database_id": "3c3cc55c-21da-4a43-8670-14c6230aa5c2",
+      "migrations_dir": "migrations"
+    }
+  ]
+}
