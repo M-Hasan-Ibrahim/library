@@ -2,7 +2,8 @@ import { useRef } from "react";
 
 const PORTFOLIO_URL = "https://mh-ibrahim.com";
 
-export default function SiteLayout({ children }) {
+/** `headerTools`: admin-only controls (nothing for visitors, so their header is unchanged). */
+export default function SiteLayout({ children, headerTools = null }) {
   const mainRef = useRef(null);
 
   // The app uses hash routing, so "#main" would be read as a route. The skip
@@ -32,6 +33,7 @@ export default function SiteLayout({ children }) {
             </span>
           </a>
           <nav aria-label="Site">
+            {headerTools}
             <a className="button" href={PORTFOLIO_URL}>
               Portfolio
             </a>

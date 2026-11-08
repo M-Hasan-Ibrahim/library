@@ -21,7 +21,17 @@
   "vars": {
     // Comma-separated origins allowed to read the API from a browser (CORS).
     // Local development adds its own origins with `--var` (see README).
-    "ALLOWED_ORIGINS": "https://library.mh-ibrahim.com"
+    "ALLOWED_ORIGINS": "https://library.mh-ibrahim.com",
+
+    // Admin sign-in (Cloudflare Access in front of /api/admin/*). Not secrets:
+    // the team domain and audience tag are visible in the Access login URL.
+    "ACCESS_TEAM_DOMAIN": "mh-ibrahim.cloudflareaccess.com",
+    // "Application Audience (AUD) Tag" of the Access application "Library Admin".
+    "ACCESS_AUD": "bdcbdda7dec5598bc0ecabcfddf4bd0faaee8d563e2514932a9f65c3b0dacfc8",
+    // Where /api/admin/login returns after sign-in (must be in ALLOWED_ORIGINS).
+    "SITE_URL": "https://library.mh-ibrahim.com/"
+    // ADMIN_EMAIL is a Worker secret (kept out of this public repository):
+    // it is uploaded with `npx wrangler@4 deploy --secrets-file <file>`.
   },
   "d1_databases": [
     {

@@ -11,8 +11,13 @@
  * CORS: only origins listed in the ALLOWED_ORIGINS variable receive
  * Access-Control-Allow-Origin. The data is public, so other clients are not
  * blocked; browsers on other sites simply cannot read the responses.
+ *
+ * /api/admin/* is handled separately by admin.js (Cloudflare Access sign-in,
+ * verified here on every request).
  */
+import { handleAdmin, isAdminPath } from "./admin.js";
 import { getCategories, getItem, getItems, getLanguages, getLibrary } from "./content.js";
+import { allowedOrigin, json } from "./http.js";
 
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MAX_SLUG_LENGTH = 120;
@@ -42,37 +47,26 @@ async function route(pathname, db) {
   return undefined;
 }
 
-function allowedOrigins(env) {
-  return String(env.ALLOWED_ORIGINS ?? "")
-    .split(",")
-    .map((origin) => origin.trim())
-    .filter(Boolean);
-}
-
 function corsHeaders(request, env) {
   // Responses differ by Origin, so caches must key on it.
   const headers = { Vary: "Origin" };
-  const origin = request.headers.get("Origin");
-  if (origin && allowedOrigins(env).includes(origin)) {
-    headers["Access-Control-Allow-Origin"] = origin;
-  }
+  const origin = allowedOrigin(request, env);
+  if (origin) headers["Access-Control-Allow-Origin"] = origin;
   return headers;
 }
 
 function respond(request, status, data, extraHeaders) {
-  const headers = {
-    "Content-Type": "application/json; charset=utf-8",
-    "X-Content-Type-Options": "nosniff",
-    "Referrer-Policy": "no-referrer",
+  return json(request, status, data, {
     "Cache-Control": status === 200 ? `public, max-age=${CACHE_SECONDS}` : "no-store",
     ...extraHeaders,
-  };
-  const body = request.method === "HEAD" ? null : JSON.stringify(data);
-  return new Response(body, { status, headers });
+  });
 }
 
 export default {
   async fetch(request, env) {
+    const { pathname } = new URL(request.url);
+    if (isAdminPath(pathname)) return handleAdmin(request, env, pathname);
+
     const cors = corsHeaders(request, env);
 
     if (request.method === "OPTIONS") {
@@ -89,7 +83,7 @@ export default {
     }
 
     try {
-      const data = await route(new URL(request.url).pathname, env.DB);
+      const data = await route(pathname, env.DB);
       if (data === undefined) return respond(request, 404, { error: "Not found" }, cors);
       return respond(request, 200, data, cors);
     } catch (error) {

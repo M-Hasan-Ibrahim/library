@@ -1,0 +1,24 @@
+/* Admin-only styles: loaded with the admin chunk, never for visitors.
+   The site header is left exactly as it is unless the admin bar is present. */
+
+.site-header nav:has(.admin-bar) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.admin-bar {
+  display: inline-flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* Same look as .eyebrow (teal, small capitals). */
+.admin-bar__label {
+  color: var(--teal);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}

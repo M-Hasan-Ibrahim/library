@@ -30,8 +30,8 @@ import categoriesData from "../content/categories.json";
 import itemsData from "../content/items.json";
 import languagesData from "../content/languages.json";
 import { validateLibrary } from "../lib/validateContent.js";
+import { API_URL } from "./apiConfig.js";
 
-const API_URL = String(import.meta.env.VITE_LIBRARY_API_URL ?? "").trim().replace(/\/+$/, "");
 const API_TIMEOUT_MS = 8000;
 
 // Bundled item text is split into separate chunks and only downloaded when opened.

@@ -88,6 +88,9 @@ src/
   contentTypes.js              Type registry (article, pdf, youtube, link)
   router.js                    URL state: filters, open/close item, Back button
   services/libraryRepository.js  The ONLY data access module (async)
+  services/apiConfig.js        API address (VITE_LIBRARY_API_URL)
+  services/adminSession.js     Admin sign-in state (Cloudflare Access)
+  admin/                       Admin-only UI, a separate chunk loaded after sign-in
   lib/                         youtube.js, inlineMarkup.js, search.js,
                                validateContent.js, format.js (pure, testable)
   components/
@@ -96,12 +99,16 @@ src/
     ItemPanel.jsx              The bottom sheet (<dialog>)
     ItemView.jsx               Shared reader layout
     RichText.jsx, PdfViewer.jsx, YouTubeEmbed.jsx, LinkPreview.jsx, RelatedLinks.jsx
-  pages/LibraryPage.jsx, NotFoundPage.jsx
+  pages/LibraryPage.jsx, NotFoundPage.jsx, AdminSignInPage.jsx (#/admin)
   styles/tokens.css            Exact portfolio palette
   styles/library.css           Layout (no motion)
   styles/panel.css             The panel and its two animations
-worker/src/index.js            Read-only API Worker: routing, CORS, responses
+worker/src/index.js            API Worker entry: public routing, CORS, responses
 worker/src/content.js          D1 queries (bound parameters only) and JSON mapping
+worker/src/admin.js            Admin API (/api/admin/*): session, login redirect
+worker/src/access.js           Cloudflare Access token verification
+worker/src/http.js             Shared JSON responses and CORS origin checks
+worker/test/                   Worker tests: npm run test:worker
 wrangler.jsonc                 Worker + D1 configuration (binding DB -> library-db)
 migrations/                    Versioned Cloudflare D1 migrations (source of truth)
 db/schema.sql                  Reference snapshot of the D1 schema (do not execute)
@@ -130,6 +137,7 @@ npx wrangler@4 d1 migrations apply library-db --local
 npx wrangler@4 d1 execute library-db --local --file=db/seed.sql
 
 # 2. The Worker on http://127.0.0.1:8787, allowing the Vite dev server
+#    (admin endpoints don't work locally: there is no Cloudflare Access there)
 npx wrangler@4 dev --local --var "ALLOWED_ORIGINS:http://127.0.0.1:5173"
 
 # 3. The site, reading from the local Worker
@@ -170,11 +178,56 @@ DNS zone. Without it, certificate issuance inherits GitHub's CAA policy through
 the `library` CNAME, which does not allow Cloudflare's certificate authority.
 
 ```bash
+npm run test:worker               # Worker tests (no network, no Cloudflare)
 npx wrangler@4 deploy --dry-run   # validates and bundles, uploads nothing
-npx wrangler@4 deploy             # publishes a new version of library-api
+npx wrangler@4 deploy --secrets-file <file>   # publishes a new version of library-api
 npx wrangler@4 deployments list --name library-api
 npx wrangler@4 rollback <version-id>   # return to any previous version
 ```
+
+`<file>` is a JSON file kept outside the repository, e.g.
+`{ "ADMIN_EMAIL": "you@example.com" }` (see "Admin sign-in"). Secrets persist
+between deployments, so later deploys can omit `--secrets-file`.
+
+## Admin sign-in (Cloudflare Access)
+
+The website stays public. Only the API's `/api/admin/*` paths are protected:
+
+1. **Cloudflare Access** (Zero Trust team `mh-ibrahim`, application "Library
+   Admin", path `api.library.mh-ibrahim.com/api/admin/*`) signs the admin in
+   with Google and allows a single email. It forwards each allowed request
+   with a signed token (`Cf-Access-Jwt-Assertion`). Access also lets `OPTIONS`
+   preflights through to the Worker.
+2. **The Worker verifies that token on every admin request**
+   (`worker/src/access.js`): RS256 signature with the team's public keys,
+   issuer, application audience (`ACCESS_AUD`), expiry and the exact admin
+   email. Anything else is `401` (keys unreachable: `503`), so a gap in the
+   Access configuration cannot expose admin endpoints.
+
+| Endpoint | Purpose |
+| -------- | ------- |
+| `GET /api/admin/session` | `{ email, expiresAt }` for the signed-in admin |
+| `GET /api/admin/login` | After Access sign-in, `302` to `SITE_URL` (`#/`); the target never comes from the request |
+
+Admin responses are `no-store` and allow credentialed CORS only for
+`ALLOWED_ORIGINS`; public endpoints never allow credentials.
+
+Configuration: `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD` and `SITE_URL` are plain
+variables in `wrangler.jsonc`; `ADMIN_EMAIL` is a Worker secret (not stored in
+this repository). If any is missing, admin requests return `503` and the
+public API keeps working.
+
+On the website:
+
+- **Sign in:** open `https://library.mh-ibrahim.com/#/admin` (not linked
+  anywhere). It goes to Google through Access and comes back to the library,
+  where a small "Admin · Sign out" control appears in the header.
+- **Sign out:** the "Sign out" button ends the Access session
+  (`/cdn-cgi/access/logout` on the API host).
+- Visitors make no admin requests: the site only checks the session in a
+  browser that started a sign-in (a `library.admin` flag in localStorage, a UI
+  hint that grants nothing), and the admin interface (`src/admin/`) is a
+  separate chunk loaded after the API confirms the session.
 
 ## Database migrations (Cloudflare D1)
 
@@ -200,11 +253,9 @@ Rules for future changes:
 
 ## Roadmap
 
-- **Next: switch the site to D1.** The Worker is live at
-  `https://api.library.mh-ibrahim.com`; the site still uses the bundled JSON
-  until the `LIBRARY_API_URL` repository variable is created (see
-  "Data source switch").
-- **Then: inline admin editing.** Same pages with small edit controls. The
+- **Done:** the live site reads from D1 through the Worker (JSON fallback
+  kept); admin sign-in with Cloudflare Access (no editing yet).
+- **Next: inline admin editing.** Same pages with small edit controls. The
   pieces are ready for it: every item and text block has a stable `id`; each
   reader section (header, media, text, links) is a separate element;
   validation rules are shared; categories and languages are data with
