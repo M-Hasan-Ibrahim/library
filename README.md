@@ -99,6 +99,7 @@ src/
     ItemPanel.jsx              The bottom sheet (<dialog>)
     ItemView.jsx               Shared reader layout
     RichText.jsx, PdfViewer.jsx, YouTubeEmbed.jsx, LinkPreview.jsx, RelatedLinks.jsx
+    SiteLayout.jsx, GlobeIcon.jsx  Header (admin login icon, Portfolio) and footer
   pages/LibraryPage.jsx, NotFoundPage.jsx, AdminSignInPage.jsx (#/admin)
   styles/tokens.css            Exact portfolio palette
   styles/library.css           Layout (no motion)
@@ -219,15 +220,28 @@ public API keeps working.
 
 On the website:
 
-- **Sign in:** open `https://library.mh-ibrahim.com/#/admin` (not linked
-  anywhere). It goes to Google through Access and comes back to the library,
-  where a small "Admin · Sign out" control appears in the header.
+- **Sign in:** the outlined globe icon left of "Portfolio" ("Admin login",
+  shown to everyone) opens `#/admin`. It goes to Google through Access and
+  comes back to the library, where a small "Admin · Sign out" control appears
+  in the header. When already signed in, `#/admin` just confirms the session.
+  The icon is only a link: Access and the Worker decide who gets in.
 - **Sign out:** the "Sign out" button ends the Access session
-  (`/cdn-cgi/access/logout` on the API host).
+  (`/cdn-cgi/access/logout` on the API host). Cloudflare revokes it for all
+  Access applications (old tokens can still be accepted for 20–30 s). Google
+  itself stays signed in, so the next sign-in may not ask for a password.
 - Visitors make no admin requests: the site only checks the session in a
-  browser that started a sign-in (a `library.admin` flag in localStorage, a UI
-  hint that grants nothing), and the admin interface (`src/admin/`) is a
-  separate chunk loaded after the API confirms the session.
+  browser that has been used to sign in (a `library.admin` flag in
+  localStorage, set when a sign-in starts and removed by Sign out; a UI hint
+  that grants nothing), and the admin interface (`src/admin/`) is a separate
+  chunk loaded after the API confirms the session.
+- Only a definite answer means "signed out" (401/403 or a redirect to the
+  Access login). Temporary problems (5xx, network) keep the current state and
+  retry; `#/admin` then shows "Sign-in unavailable" with "Try again" instead of
+  redirecting in a loop. Open tabs stay in sync (sign-out and sign-in in one
+  tab update the others), and a tab re-checks when it becomes visible.
+- The Worker shares one key fetch between simultaneous requests, retries a
+  failed fetch once, and after a failure tries again within seconds, so a
+  brief problem fetching Access's public keys cannot block sign-in for long.
 
 ## Database migrations (Cloudflare D1)
 

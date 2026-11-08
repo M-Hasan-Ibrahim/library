@@ -2,12 +2,12 @@ import { useEffect } from "react";
 import PageHeader from "../components/PageHeader.jsx";
 import useAdminSession from "../hooks/useAdminSession.js";
 import useDocumentTitle from "../hooks/useDocumentTitle.js";
-import { startAdminSignIn } from "../services/adminSession.js";
+import { checkAdminSession, startAdminSignIn } from "../services/adminSession.js";
 
 /**
- * #/admin (not linked anywhere). Sends the admin to Cloudflare Access
- * (Google sign-in), which returns to the library at #/. Visiting it while
- * signed in just confirms the session.
+ * #/admin (reached from the header's "Admin login" icon). Sends the admin to
+ * Cloudflare Access (Google sign-in), which returns to the library at #/.
+ * When already signed in it just confirms the session, without a new login.
  */
 export default function AdminSignInPage() {
   const session = useAdminSession();
@@ -24,6 +24,22 @@ export default function AdminSignInPage() {
         <a className="button button--primary" href="#/">
           Back to the library
         </a>
+      </div>
+    );
+  }
+
+  if (session.status === "unavailable") {
+    // Never redirect in a loop: the server could not answer, so let the admin retry.
+    return (
+      <div className="page">
+        <PageHeader
+          eyebrow="Admin"
+          lede="Sign-in could not be confirmed right now. Please try again in a moment."
+          title="Sign-in unavailable"
+        />
+        <button className="button button--primary" onClick={() => checkAdminSession()} type="button">
+          Try again
+        </button>
       </div>
     );
   }

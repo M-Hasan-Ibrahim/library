@@ -21,7 +21,14 @@
 const MAX_TOKEN_LENGTH = 8192;
 const CLOCK_SKEW_SECONDS = 30;
 const KEYS_TTL_MS = 60 * 60 * 1000; // re-read the public keys hourly
-const MIN_REFRESH_INTERVAL_MS = 60 * 1000; // at most one key fetch per minute
+// Unknown kid while keys are cached: re-read at most once per minute, so
+// random kids cannot make the Worker fetch on every request.
+const UNKNOWN_KID_REFRESH_MS = 60 * 1000;
+// No usable keys at all (first fetch failed): try again soon instead of
+// refusing every sign-in for a minute.
+const EMPTY_RETRY_MS = 2 * 1000;
+const FETCH_ATTEMPTS = 2; // one retry inside the same request
+const FETCH_RETRY_DELAY_MS = 250;
 const FETCH_TIMEOUT_MS = 5000;
 
 const TEAM_DOMAIN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.cloudflareaccess\.com$/;
@@ -123,25 +130,46 @@ async function importSigningKeys(jwks) {
   return keys;
 }
 
-async function refreshKeys(store, teamDomain, nowMs, fetchKeys) {
-  store.attemptedAt = nowMs;
-  store.pending ??= (async () => {
+const describe = (error) => (error instanceof Error ? `${error.name}: ${error.message}` : String(error));
+
+/** Fetches and imports the keys, retrying once; throws when nothing usable came back. */
+async function loadSigningKeys(teamDomain, fetchKeys) {
+  let lastError;
+  for (let attempt = 1; attempt <= FETCH_ATTEMPTS; attempt += 1) {
     try {
       const keys = await importSigningKeys(await fetchKeys(teamDomain));
-      if (keys.size > 0) {
+      if (keys.size > 0) return keys;
+      lastError = new Error("response contained no usable RS256 keys");
+    } catch (error) {
+      lastError = error;
+    }
+    console.warn(`Access signing keys: attempt ${attempt}/${FETCH_ATTEMPTS} failed (${describe(lastError)})`);
+    if (attempt < FETCH_ATTEMPTS) await new Promise((resolve) => setTimeout(resolve, FETCH_RETRY_DELAY_MS));
+  }
+  throw lastError;
+}
+
+/**
+ * Starts a key refresh, or joins the one already in progress, so that
+ * simultaneous requests share a single fetch instead of finding no keys.
+ */
+function refreshKeys(store, teamDomain, nowMs, fetchKeys) {
+  if (!store.pending) {
+    store.attemptedAt = nowMs;
+    store.pending = loadSigningKeys(teamDomain, fetchKeys)
+      .then((keys) => {
         store.keys = keys;
         store.fetchedAt = nowMs;
-      } else {
-        console.error("Access signing keys: response contained no usable RS256 keys");
-      }
-    } catch (error) {
-      // Keep any keys we already have (they rotate slowly); fail closed if none.
-      console.error("Access signing keys could not be fetched:", error instanceof Error ? error.message : error);
-    } finally {
-      store.pending = null;
-    }
-  })();
-  await store.pending;
+      })
+      .catch((error) => {
+        // Keep any keys we already have (they rotate slowly); fail closed if none.
+        console.error(`Access signing keys could not be fetched (${describe(error)})`);
+      })
+      .finally(() => {
+        store.pending = null;
+      });
+  }
+  return store.pending;
 }
 
 async function signingKey(config, kid, nowMs, fetchKeys) {
@@ -150,10 +178,12 @@ async function signingKey(config, kid, nowMs, fetchKeys) {
     store = { keys: new Map(), fetchedAt: 0, attemptedAt: -Infinity, pending: null };
     keyStores.set(config.teamDomain, store);
   }
+  // A refresh started by another request is still running: wait for it.
+  if (store.pending) await store.pending;
+
   const stale = nowMs - store.fetchedAt > KEYS_TTL_MS;
-  // Unknown kid: maybe the keys rotated. Re-read them, but rate-limited so
-  // random kids cannot make the Worker fetch on every request.
-  if ((stale || !store.keys.has(kid)) && nowMs - store.attemptedAt >= MIN_REFRESH_INTERVAL_MS) {
+  const retryAfter = store.keys.size === 0 ? EMPTY_RETRY_MS : UNKNOWN_KID_REFRESH_MS;
+  if ((stale || !store.keys.has(kid)) && nowMs - store.attemptedAt >= retryAfter) {
     await refreshKeys(store, config.teamDomain, nowMs, fetchKeys);
   }
   if (store.keys.size === 0) throw new AccessError("keys_unavailable");

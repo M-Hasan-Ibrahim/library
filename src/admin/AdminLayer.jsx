@@ -7,22 +7,15 @@ import "./admin.css";
  * loaded after the API has confirmed the session, so visitors never
  * download it. Phase 1: sign-in status and sign-out; the inline editing
  * tools will be mounted from here in later phases.
+ * (Re-checks on tab focus and across tabs live in services/adminSession.js.)
  */
 export default function AdminLayer({ session }) {
-  // Re-check when the Access session expires, and when the tab comes back
-  // after it has expired, so the UI never pretends to be signed in.
+  // Re-check when the Access session expires, so the UI never pretends to be signed in.
   useEffect(() => {
     const expiresAt = Date.parse(session.expiresAt);
     if (!Number.isFinite(expiresAt)) return undefined;
     const timer = setTimeout(checkAdminSession, Math.min(Math.max(expiresAt - Date.now(), 0) + 1000, 2_000_000_000));
-    const onVisible = () => {
-      if (document.visibilityState === "visible" && Date.now() >= expiresAt) checkAdminSession();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      clearTimeout(timer);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
+    return () => clearTimeout(timer);
   }, [session.expiresAt]);
 
   return (

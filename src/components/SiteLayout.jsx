@@ -1,4 +1,6 @@
 import { useRef } from "react";
+import { adminSignInAvailable } from "../services/adminSession.js";
+import GlobeIcon from "./GlobeIcon.jsx";
 
 const PORTFOLIO_URL = "https://mh-ibrahim.com";
 
@@ -34,6 +36,12 @@ export default function SiteLayout({ children, headerTools = null }) {
           </a>
           <nav aria-label="Site">
             {headerTools}
+            {/* Shown to everyone; it only opens #/admin. Access and the Worker decide who gets in. */}
+            {adminSignInAvailable && (
+              <a aria-label="Admin login" className="button button--icon" href="#/admin" title="Admin login">
+                <GlobeIcon />
+              </a>
+            )}
             <a className="button" href={PORTFOLIO_URL}>
               Portfolio
             </a>

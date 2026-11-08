@@ -52,11 +52,18 @@ export async function signToken(claims, key, headerOverrides = {}) {
 export function keyFetcher(...keys) {
   const fetcher = async () => {
     fetcher.calls += 1;
+    if (fetcher.delayMs) await new Promise((resolve) => setTimeout(resolve, fetcher.delayMs));
     if (fetcher.fail) throw new Error("network down");
+    if (fetcher.failNext > 0) {
+      fetcher.failNext -= 1;
+      throw new Error("transient network error");
+    }
     return fetcher.jwks;
   };
   fetcher.calls = 0;
-  fetcher.fail = false;
+  fetcher.fail = false; // every call fails
+  fetcher.failNext = 0; // the next N calls fail
+  fetcher.delayMs = 0;
   fetcher.jwks = keys.map((key) => key.jwk);
   return fetcher;
 }

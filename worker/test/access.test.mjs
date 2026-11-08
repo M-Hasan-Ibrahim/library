@@ -184,7 +184,35 @@ describe("public keys", () => {
     const later = now + 2 * 60 * 60 * 1000;
     const claims = validClaims({ iat: Math.floor(later / 1000) - 10, nbf: Math.floor(later / 1000) - 10, exp: Math.floor(later / 1000) + 3600 });
     await verify(await signToken(claims, trusted), { now: later });
+    assert.equal(fetchKeys.calls, 3, "1 initial fetch + 2 failed refresh attempts");
+  });
+
+  // Regression tests for the intermittent "Sign-in is temporarily unavailable" (503).
+  test("simultaneous requests in a fresh instance share one key fetch and all succeed", async () => {
+    fetchKeys.delayMs = 150;
+    const token = await signToken(validClaims(), trusted);
+    const results = await Promise.allSettled([verify(token), verify(token), verify(token)]);
+    assert.deepEqual(results.map((r) => r.status), ["fulfilled", "fulfilled", "fulfilled"]);
+    assert.equal(fetchKeys.calls, 1);
+  });
+
+  test("a transient fetch error is retried within the same request", async () => {
+    fetchKeys.failNext = 1;
+    await verify(await signToken(validClaims(), trusted));
     assert.equal(fetchKeys.calls, 2);
+  });
+
+  test("after a failed key fetch, sign-in recovers within seconds (not a minute)", async () => {
+    const now = Date.now();
+    const token = await signToken(validClaims(), trusted);
+    fetchKeys.fail = true;
+    await rejects(verify(token, { now }), "keys_unavailable");
+    assert.equal(fetchKeys.calls, 2, "two attempts");
+    fetchKeys.fail = false;
+    await rejects(verify(token, { now: now + 1000 }), "keys_unavailable");
+    assert.equal(fetchKeys.calls, 2, "no new fetch within 2 seconds");
+    await verify(token, { now: now + 3000 });
+    assert.equal(fetchKeys.calls, 3, "retried after 2 seconds and succeeded");
   });
 });
 

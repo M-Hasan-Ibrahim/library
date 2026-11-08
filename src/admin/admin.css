@@ -1,13 +1,5 @@
 /* Admin-only styles: loaded with the admin chunk, never for visitors.
-   The site header is left exactly as it is unless the admin bar is present. */
-
-.site-header nav:has(.admin-bar) {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
-  justify-content: flex-end;
-}
+   (The header actions row itself is styled in styles/library.css.) */
 
 .admin-bar {
   display: inline-flex;
