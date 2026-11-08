@@ -265,10 +265,32 @@ The `library-db` schema is managed with numbered files in `migrations/`:
 | ---- | -------- |
 | `0001_initial_schema.sql` | `languages`, `categories`, `items` tables and 4 indexes |
 | `0002_seed_languages_and_categories.sql` | 2 languages, 5 categories (same IDs as `src/content/*.json`) |
+| `0003_content_management.sql` | Drafts, revisions, edit history (see below) |
 
-Both are idempotent (`IF NOT EXISTS`, `INSERT OR IGNORE`), so they are safe on
-a database that already has these objects. Wrangler records applied files in
-the `d1_migrations` table and never runs a recorded file again.
+0001 and 0002 are idempotent (`IF NOT EXISTS`, `INSERT OR IGNORE`), so they
+are safe on a database that already has these objects. 0003 is additive but
+not re-runnable (`ALTER TABLE ADD COLUMN`); D1 applies each file as one unit,
+so a failed run leaves nothing behind. Wrangler records applied files in the
+`d1_migrations` table and never runs a recorded file again.
+
+### Content management model (0003)
+
+- `items.status`: `draft` or `published` (existing items: `published`). The
+  public API reads items only through the `published_items` view, so drafts
+  are never public. Deploy a Worker that uses the view only after 0003 is
+  applied (the older Worker works with and without 0003).
+- `items.revision`, `categories.revision`: start at 1. Edits are
+  `UPDATE … SET …, revision = revision + 1 WHERE id = ? AND revision = ?`;
+  no matching row means someone else saved first (conflict). Triggers refuse
+  any UPDATE that does not increase `revision` by exactly 1 — future data
+  migrations must bump it too.
+- `revisions`: one row per change (`import`, `create`, `update`, `publish`,
+  `unpublish`, `delete`, `restore`) with the complete row as JSON
+  (`snapshot_json`), who (`changed_by`) and when (`changed_at`, ms). UNIQUE
+  (entity, revision) blocks duplicate history. No foreign keys, so history
+  survives deletes. 0003 records one `import` snapshot for every existing item
+  and category, so their current state can always be restored. Write
+  endpoints will change a row and record its revision in the same D1 batch.
 
 Rules for future changes:
 

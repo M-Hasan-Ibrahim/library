@@ -9,6 +9,11 @@
  * Security: every SQL statement is a constant string. The only user input
  * (an item slug) is validated by the router and passed with .bind(), never
  * concatenated into SQL.
+ *
+ * Drafts: public queries read items ONLY through the `published_items` view
+ * (migration 0003), never from the `items` table, so a draft cannot be
+ * returned by any public endpoint. This Worker therefore requires migration
+ * 0003 to be applied before it is deployed.
  */
 
 const CATEGORIES_SQL =
@@ -18,15 +23,15 @@ const CATEGORIES_SQL =
 const LANGUAGES_SQL = "SELECT code, name, native_name, dir FROM languages ORDER BY rowid";
 
 // The list never includes body_json: bodies are only sent for a single item.
-const ITEMS_SQL =
+export const ITEMS_SQL =
   "SELECT id, slug, type, category_id, language, title, description, tags_json, links_json, " +
   "added_at, updated_at, reading_minutes, file_url, page_count, video_url, url " +
-  "FROM items ORDER BY added_at DESC, id";
+  "FROM published_items ORDER BY added_at DESC, id";
 
-const ITEM_BY_SLUG_SQL =
+export const ITEM_BY_SLUG_SQL =
   "SELECT id, slug, type, category_id, language, title, description, tags_json, links_json, " +
   "added_at, updated_at, reading_minutes, file_url, page_count, video_url, url, body_json " +
-  "FROM items WHERE slug = ?1 LIMIT 1";
+  "FROM published_items WHERE slug = ?1 LIMIT 1";
 
 function parseJson(text, fallback) {
   if (typeof text !== "string" || text === "") return fallback;

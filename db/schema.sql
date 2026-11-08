@@ -29,7 +29,9 @@ CREATE TABLE IF NOT EXISTS categories (
   description TEXT NOT NULL DEFAULT '',
   position    INTEGER NOT NULL DEFAULT 0,       -- display order
   created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-  updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+  updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  -- 0003: optimistic concurrency; every UPDATE must add exactly 1 (trigger).
+  revision    INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1)
 );
 
 CREATE TABLE IF NOT EXISTS items (
@@ -53,6 +55,11 @@ CREATE TABLE IF NOT EXISTS items (
   page_count      INTEGER,                      -- pdf
   video_url       TEXT,                         -- youtube: any supported YouTube URL
   url             TEXT,                         -- link: destination
+  -- 0003 (added with ALTER TABLE ADD COLUMN, i.e. after all earlier columns):
+  -- only 'published' items are public (through the published_items view).
+  status          TEXT NOT NULL DEFAULT 'published' CHECK (status IN ('draft', 'published')),
+  -- optimistic concurrency; every UPDATE must add exactly 1 (trigger).
+  revision        INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1),
   CHECK (
     (type = 'article' AND body_json IS NOT NULL) OR
     (type = 'pdf'     AND file_url  IS NOT NULL) OR
@@ -65,3 +72,40 @@ CREATE INDEX IF NOT EXISTS idx_items_added ON items (added_at DESC);
 CREATE INDEX IF NOT EXISTS idx_items_category_added ON items (category_id, added_at DESC);
 CREATE INDEX IF NOT EXISTS idx_items_language ON items (language);
 CREATE INDEX IF NOT EXISTS idx_items_type ON items (type);
+CREATE INDEX IF NOT EXISTS idx_items_status_added ON items (status, added_at DESC);
+
+-- 0003: the public API reads items only through this view.
+CREATE VIEW IF NOT EXISTS published_items AS
+  SELECT * FROM items WHERE status = 'published';
+
+-- 0003: no UPDATE without moving the revision forward by exactly one.
+CREATE TRIGGER IF NOT EXISTS items_revision_step
+BEFORE UPDATE ON items
+WHEN NEW.revision IS NOT OLD.revision + 1
+BEGIN
+  SELECT RAISE(ABORT, 'items.revision must increase by exactly 1 on every update');
+END;
+
+CREATE TRIGGER IF NOT EXISTS categories_revision_step
+BEFORE UPDATE ON categories
+WHEN NEW.revision IS NOT OLD.revision + 1
+BEGIN
+  SELECT RAISE(ABORT, 'categories.revision must increase by exactly 1 on every update');
+END;
+
+-- 0003: edit history. snapshot_json = the complete row after the change
+-- (for 'delete': the deleted row). No foreign keys: history outlives deletes.
+CREATE TABLE IF NOT EXISTS revisions (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  entity_type   TEXT NOT NULL CHECK (entity_type IN ('item', 'category', 'language')),
+  entity_id     TEXT NOT NULL,
+  revision      INTEGER NOT NULL CHECK (revision >= 1),
+  action        TEXT NOT NULL CHECK (action IN ('import', 'create', 'update', 'publish', 'unpublish', 'delete', 'restore')),
+  snapshot_json TEXT NOT NULL CHECK (json_valid(snapshot_json)),
+  changed_by    TEXT NOT NULL,
+  changed_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  note          TEXT NOT NULL DEFAULT '',
+  UNIQUE (entity_type, entity_id, revision)
+);
+
+CREATE INDEX IF NOT EXISTS idx_revisions_changed_at ON revisions (changed_at DESC);
