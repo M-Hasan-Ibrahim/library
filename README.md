@@ -92,7 +92,8 @@ src/
   services/adminSession.js     Admin sign-in state (Cloudflare Access)
   admin/                       Admin-only UI, a separate chunk loaded after sign-in
   lib/                         youtube.js, inlineMarkup.js, search.js,
-                               validateContent.js, format.js (pure, testable)
+                               validateContent.js, format.js (pure, testable),
+                               validateBlocks.js, readingTime.js (shared with the Worker)
   components/
     ItemCard.jsx               One card for every type
     LibraryFilters.jsx         Category chips, type & language selects
@@ -106,10 +107,13 @@ src/
   styles/panel.css             The panel and its two animations
 worker/src/index.js            API Worker entry: public routing, CORS, responses
 worker/src/content.js          D1 queries (bound parameters only) and JSON mapping
-worker/src/admin.js            Admin API (/api/admin/*): session, login redirect
+worker/src/admin.js            Admin API (/api/admin/*): routing, request guards, errors
+worker/src/adminItems.js       Admin item operations on D1 (atomic batches, revisions)
+worker/src/itemInput.js        Admin input whitelist, limits and normalisation
 worker/src/access.js           Cloudflare Access token verification
 worker/src/http.js             Shared JSON responses and CORS origin checks
-worker/test/                   Worker tests: npm run test:worker
+worker/test/                   Worker tests: npm run test:worker (admin API tests run
+                               on real SQLite built from migrations + seed)
 wrangler.jsonc                 Worker + D1 configuration (binding DB -> library-db)
 migrations/                    Versioned Cloudflare D1 migrations (source of truth)
 db/schema.sql                  Reference snapshot of the D1 schema (do not execute)
@@ -257,6 +261,44 @@ On the website:
   failed fetch once, and after a failure tries again within seconds, so a
   brief problem fetching Access's public keys cannot block sign-in for long.
 
+## Admin content API
+
+Behind the same Access sign-in and token check (all responses `no-store`):
+
+| Endpoint | Body | Result |
+| -------- | ---- | ------ |
+| `GET /api/admin/items` | | All items incl. drafts (no bodies), with `status`, `revision`, counts |
+| `POST /api/admin/items` | item fields | `201` new **draft** at revision 1 |
+| `GET /api/admin/items/:id` | | One item incl. drafts, with `blocks` |
+| `PATCH /api/admin/items/:id` | `{ revision, …fields }` | Only the fields sent change |
+| `DELETE /api/admin/items/:id` | `{ revision }` | Deleted; a tombstone revision keeps the row |
+| `POST /api/admin/items/:id/publish` · `/unpublish` | `{ revision }` | Status change (no-op if already so: `changed: false`) |
+| `GET /api/admin/items/:id/revisions` | | History, newest first |
+| `GET /api/admin/items/:id/revisions/:rev` | | That version's full content |
+| `POST /api/admin/items/:id/restore` | `{ revision, fromRevision }` | That content as a new revision; a deleted item returns as a draft |
+| `GET /api/admin/deleted-items` | | Deleted items that can be restored |
+
+Item fields: `type` (create only), `slug` (create only, optional: generated
+from the title, or `item-xxxxxx` for non-Latin titles; unique also against
+deleted items), `categoryId`, `language`, `title`, `description`, `tags`,
+`links`, `addedAt`, `blocks`, and per type `fileUrl`/`pageCount` (pdf),
+`videoUrl` (youtube) or `url` (link). The server sets `id`, `updatedAt`,
+`readingMinutes` (articles: words ÷ 200, rounded up) and `status`/`revision`.
+`id`, `slug` and `type` never change after creation.
+
+- Every write is one D1 batch (item change + its `revisions` row, all or
+  nothing) and must name the revision it is based on; if the item changed in
+  the meantime the answer is `409` with `currentRevision`.
+- Writes also need the site's `Origin` (and same-site `Sec-Fetch-Site` when
+  sent), `Content-Type: application/json` and at most 256 KB; unknown fields,
+  wrong types, unsafe links (`javascript:` …), control characters and invalid
+  rich text are refused with `422` and per-field messages. Validation uses the
+  shared rules in `src/lib/` (the same ones the website and future editor use).
+- Errors: `400` bad JSON, `401` not signed in, `403` wrong origin, `404`, `405`,
+  `409` conflict / slug taken, `413` too large, `415` not JSON, `422` invalid.
+- PDFs reference existing files (`documents/<name>.pdf` on the site, or an
+  `https://` URL); uploading new PDFs is not implemented yet.
+
 ## Database migrations (Cloudflare D1)
 
 The `library-db` schema is managed with numbered files in `migrations/`:
@@ -304,7 +346,8 @@ Rules for future changes:
 ## Roadmap
 
 - **Done:** the live site reads from D1 through the Worker (JSON fallback
-  kept); admin sign-in with Cloudflare Access (no editing yet).
+  kept); admin sign-in with Cloudflare Access; drafts and revision history
+  (migration 0003); the admin content API.
 - **Next: inline admin editing.** Same pages with small edit controls. The
   pieces are ready for it: every item and text block has a stable `id`; each
   reader section (header, media, text, links) is a separate element;

@@ -7,7 +7,7 @@
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "test:worker": "node --test \"worker/test/*.test.mjs\""
+    "test:worker": "node --test --disable-warning=ExperimentalWarning \"worker/test/*.test.mjs\""
   },
   "dependencies": {
     "pdfjs-dist": "^6.1.200",

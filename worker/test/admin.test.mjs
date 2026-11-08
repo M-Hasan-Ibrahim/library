@@ -184,12 +184,13 @@ describe("GET /api/admin/login", () => {
 
 describe("other admin requests", () => {
   test("unknown admin path: 401 without a token, 404 with one (no path discovery)", async () => {
-    assert.equal((await call("/api/admin/items")).status, 401);
-    assert.equal((await call("/api/admin/items", { token: await goodToken() })).status, 404);
+    assert.equal((await call("/api/admin/nothing-here")).status, 401);
+    assert.equal((await call("/api/admin/nothing-here", { token: await goodToken() })).status, 404);
     assert.equal((await call("/api/admin/session/", { token: await goodToken() })).status, 404);
+    assert.equal((await call("/api/admin/items/not-an-id", { token: await goodToken() })).status, 404);
   });
 
-  test("write methods: 401 without a token, 405 with one (no write endpoints yet)", async () => {
+  test("methods a route does not support: 401 without a token, 405 with one", async () => {
     const token = await goodToken();
     for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
       assert.equal((await call("/api/admin/session", { method })).status, 401, method);
@@ -199,7 +200,7 @@ describe("other admin requests", () => {
     }
     const login = await call("/api/admin/login", { method: "POST", token });
     assert.equal(login.status, 405);
-    assert.equal(login.headers.get("allow"), "GET");
+    assert.equal(login.headers.get("allow"), "GET, HEAD");
   });
 
   test("preflight from the site -> 204 with credentialed CORS (no token needed, no data)", async () => {
@@ -207,7 +208,8 @@ describe("other admin requests", () => {
     assert.equal(res.status, 204);
     assert.equal(res.headers.get("access-control-allow-origin"), SITE);
     assert.equal(res.headers.get("access-control-allow-credentials"), "true");
-    assert.equal(res.headers.get("access-control-allow-methods"), "GET, HEAD, OPTIONS");
+    assert.equal(res.headers.get("access-control-allow-methods"), "GET, HEAD, POST, PATCH, DELETE, OPTIONS");
+    assert.equal(res.headers.get("access-control-allow-headers"), "Content-Type");
     assert.equal(res.text, "");
   });
 
