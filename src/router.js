@@ -7,9 +7,12 @@
  * - Search and filters REPLACE the current history entry (no Back-button spam).
  * - Opening an item PUSHES an entry, so Back (or Android's back gesture)
  *   closes the panel and returns to the same filtered list.
+ * - `panel` names an admin-only panel ("new" item, "deleted" items). It opens
+ *   in the same reading panel with the same history behaviour; the app
+ *   ignores it unless the admin is signed in.
  */
 
-const PARAM_KEYS = ["q", "category", "type", "lang", "item"];
+const PARAM_KEYS = ["q", "category", "type", "lang", "item", "panel"];
 const PANEL_ENTRY = "libraryPanel";
 const listeners = new Set();
 let isGoingBack = false;
@@ -35,7 +38,7 @@ export function subscribe(listener) {
 
 export const getHash = () => window.location.hash;
 
-/** @returns {{ path: string, params: { q: string, category: string, type: string, lang: string, item: string } }} */
+/** @returns {{ path: string, params: { q: string, category: string, type: string, lang: string, item: string, panel: string } }} */
 export function parseLocation(hash) {
   const raw = hash.replace(/^#/, "");
   const queryStart = raw.indexOf("?");
@@ -62,22 +65,32 @@ function write(hash, { replace, state = window.history.state }) {
   notify();
 }
 
-/** Search and filters: updates the URL in place. */
+/** Search and filters: updates the URL in place (an admin panel is never open meanwhile). */
 export function updateParams(changes) {
-  write(buildHash({ ...currentParams(), ...changes }), { replace: true });
+  write(buildHash({ ...currentParams(), panel: "", ...changes }), { replace: true });
 }
 
 /** Link target for an item, keeping the current filters. */
-export const itemHref = (slug) => buildHash({ ...currentParams(), item: slug });
+export const itemHref = (slug) => buildHash({ ...currentParams(), item: slug, panel: "" });
+
+function showInPanel(changes) {
+  const params = currentParams();
+  const hash = buildHash({ ...params, item: "", panel: "", ...changes });
+  if (params.item || params.panel) {
+    // Already reading something: swap content without stacking history.
+    write(hash, { replace: true });
+  } else {
+    write(hash, { replace: false, state: { [PANEL_ENTRY]: true } });
+  }
+}
 
 export function openItem(slug) {
-  const params = currentParams();
-  if (params.item) {
-    // Already reading something: swap content without stacking history.
-    write(buildHash({ ...params, item: slug }), { replace: true });
-  } else {
-    write(buildHash({ ...params, item: slug }), { replace: false, state: { [PANEL_ENTRY]: true } });
-  }
+  showInPanel({ item: slug });
+}
+
+/** Admin panels ("new", "deleted"): same history behaviour as an item. */
+export function openPanel(name) {
+  showInPanel({ panel: name });
 }
 
 export function closeItem() {
@@ -89,7 +102,7 @@ export function closeItem() {
     return;
   }
   // Opened from a shared link: remove the item from the URL instead.
-  write(buildHash({ ...currentParams(), item: "" }), { replace: true });
+  write(buildHash({ ...currentParams(), item: "", panel: "" }), { replace: true });
 }
 
 /**

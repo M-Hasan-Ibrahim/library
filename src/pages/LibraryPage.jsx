@@ -7,14 +7,20 @@ import { EmptyState, ErrorState, LoadingState } from "../components/StatusMessag
 import { CONTENT_TYPES } from "../contentTypes.js";
 import useAsync from "../hooks/useAsync.js";
 import useDocumentTitle from "../hooks/useDocumentTitle.js";
+import useLibraryVersion from "../hooks/useLibraryVersion.js";
 import { plural } from "../lib/format.js";
 import { filterItems } from "../lib/search.js";
 import { updateParams } from "../router.js";
 import { getLibrary } from "../services/libraryRepository.js";
 
-/** One unified collection: every content type, filtered by URL parameters. */
-export default function LibraryPage({ params }) {
-  const library = useAsync(getLibrary, []);
+/**
+ * One unified collection: every content type, filtered by URL parameters.
+ * `adminTools`: signed-in admin only, shown next to the item count.
+ */
+export default function LibraryPage({ params, adminTools = null }) {
+  // Re-read after admin changes; the current list stays on screen meanwhile.
+  const libraryVersion = useLibraryVersion();
+  const library = useAsync(getLibrary, [libraryVersion]);
   const query = params.q.trim();
   useDocumentTitle(query ? `Search: ${query}` : undefined);
 
@@ -28,16 +34,16 @@ export default function LibraryPage({ params }) {
 
       <SearchField onChange={(value) => updateParams({ q: value })} value={params.q} />
 
-      {library.status === "loading" && <LoadingState label="Loading the library…" />}
+      {library.status === "loading" && !library.data && <LoadingState label="Loading the library…" />}
       {library.status === "error" && (
         <ErrorState message={library.error.message} title="The library could not be loaded." />
       )}
-      {library.status === "success" && <Collection library={library.data} params={params} />}
+      {library.data && <Collection adminTools={adminTools} library={library.data} params={params} />}
     </div>
   );
 }
 
-function Collection({ library, params }) {
+function Collection({ library, params, adminTools }) {
   const { categories, languages, items } = library;
 
   // Unknown values in the URL (e.g. an old link) are ignored, so the controls
@@ -91,6 +97,7 @@ function Collection({ library, params }) {
               Clear filters
             </button>
           )}
+          {adminTools}
         </div>
 
         {items.length === 0 ? (
