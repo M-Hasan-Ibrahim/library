@@ -132,7 +132,7 @@ describe("GET /api/admin/login", () => {
   test("valid token -> 302 to the fixed Library address", async () => {
     const res = await call("/api/admin/login", { token: await goodToken() });
     assert.equal(res.status, 302);
-    assert.equal(res.headers.get("location"), `${SITE}/#/`);
+    assert.equal(res.headers.get("location"), `${SITE}/?admin=signed-in#/`);
     assert.equal(res.headers.get("cache-control"), "no-store");
   });
 
@@ -140,7 +140,7 @@ describe("GET /api/admin/login", () => {
     const token = await goodToken();
     for (const query of ["?next=https://evil.example", "?redirect_url=//evil.example", "?return=javascript:alert(1)"]) {
       const res = await call(`/api/admin/login${query}`, { token });
-      assert.equal(res.headers.get("location"), `${SITE}/#/`, query);
+      assert.equal(res.headers.get("location"), `${SITE}/?admin=signed-in#/`, query);
     }
   });
 
@@ -149,6 +149,26 @@ describe("GET /api/admin/login", () => {
       const res = await call("/api/admin/login", { token });
       assert.equal(res.status, 401);
       assert.equal(res.headers.get("location"), null);
+    }
+  });
+
+  test("Cloudflare-started logins landing on /api/admin/*, %2A or /api/admin/ -> same fixed redirect", async () => {
+    const token = await goodToken();
+    for (const path of ["/api/admin/*", "/api/admin/%2A", "/api/admin/%2a", "/api/admin/"]) {
+      const res = await call(path, { token });
+      assert.equal(res.status, 302, path);
+      assert.equal(res.headers.get("location"), `${SITE}/?admin=signed-in#/`, path);
+      assert.equal(res.headers.get("cache-control"), "no-store", path);
+    }
+  });
+
+  test("those landing paths still require a valid token and allow GET only", async () => {
+    for (const path of ["/api/admin/*", "/api/admin/"]) {
+      const res = await call(path);
+      assert.equal(res.status, 401, path);
+      assert.equal(res.headers.get("location"), null, path);
+      assert.equal((await call(path, { token: await signToken(validClaims(), attacker) })).status, 401, path);
+      assert.equal((await call(path, { method: "POST", token: await goodToken() })).status, 405, path);
     }
   });
 

@@ -5,17 +5,20 @@ import useDocumentTitle from "../hooks/useDocumentTitle.js";
 import { checkAdminSession, startAdminSignIn } from "../services/adminSession.js";
 
 /**
- * #/admin (reached from the header's "Admin login" icon). Sends the admin to
- * Cloudflare Access (Google sign-in), which returns to the library at #/.
- * When already signed in it just confirms the session, without a new login.
+ * #/admin (reached from the header's "Admin login" globe). Once the API has
+ * answered: signed in -> confirmation (no new login); signed out -> Cloudflare
+ * Access (Google sign-in), which returns to the library at #/; API unavailable
+ * -> a message with "Try again" (never a redirect loop).
  */
 export default function AdminSignInPage() {
   const session = useAdminSession();
   useDocumentTitle("Admin sign-in");
 
   useEffect(() => {
-    if (session.status === "signed-out") startAdminSignIn();
-  }, [session.status]);
+    if (session.status !== "signed-out") return;
+    if (session.verified) startAdminSignIn();
+    else checkAdminSession(); // wait for the server's answer first
+  }, [session]);
 
   if (session.status === "signed-in") {
     return (
@@ -29,7 +32,6 @@ export default function AdminSignInPage() {
   }
 
   if (session.status === "unavailable") {
-    // Never redirect in a loop: the server could not answer, so let the admin retry.
     return (
       <div className="page">
         <PageHeader

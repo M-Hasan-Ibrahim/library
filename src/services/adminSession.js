@@ -5,56 +5,79 @@
  * paths (Google login, one allowed account). The website stores no password
  * and no token: Access keeps an HttpOnly cookie on the API host, which the
  * browser sends with credentialed requests to /api/admin/*. The Worker
- * verifies the Access token on every one of those requests.
+ * verifies the Access token on every one of those requests; nothing here
+ * grants anything.
  *
- * Visitors are never affected:
- * - Nothing is requested unless this browser has been used to sign in
- *   (a "library.admin" flag in localStorage, set when a sign-in starts and
- *   removed by Sign out). The flag is only a hint for the UI; it grants nothing.
- * - The admin interface (src/admin/) is a separate chunk, loaded only after
- *   the API has confirmed the session.
+ * When the page asks GET /api/admin/session (the server decides):
+ * - after any successful login: the Worker's /api/admin/login sends the
+ *   browser to "<site>/?admin=signed-in#/" whichever way the login started
+ *   (the header's globe, /api/admin/login typed directly, Cloudflare's own
+ *   "Log in" button). The marker is removed at once; it grants nothing.
+ * - in a browser whose last confirmed state was "signed in" (localStorage
+ *   "library.admin", a hint only), so returning admins and new tabs see
+ *   "checking" instead of the visitor header (no globe flicker);
+ * - on #/admin, before deciding whether a login is needed;
+ * - when another tab signs in, and when an admin tab becomes visible again.
+ * Plain visitors make no admin request at all (Access would otherwise answer
+ * them with a redirect and set a CF_AppSession cookie on the API host).
+ * The admin interface (src/admin/) is a separate chunk, loaded only after the
+ * API has confirmed the session.
  *
- * States: { status: "signed-out" } | { status: "checking" }
- *       | { status: "unavailable" }  (the API could not confirm right now)
+ * States: { status: "signed-out", verified } | { status: "checking" }
+ *       | { status: "unavailable" }  (the API could not answer right now)
  *       | { status: "signed-in", email, expiresAt }
  *
- * Only a definite answer from the server (401/403, or a redirect to the
- * Access login) means "signed out". Temporary problems (5xx, network,
- * timeout) keep the previous state and retry, so a short outage never logs
- * the admin out of the UI. Open tabs stay in sync through the flag.
+ * Only a definite answer from the server (401/403, or a redirect to the Access
+ * login) means "signed out". Temporary problems (5xx, network, timeout) keep a
+ * confirmed session and retry, so a short outage never logs the admin out of
+ * the UI. Open tabs follow sign-in and Sign out in any other tab.
  */
 import { API_URL } from "./apiConfig.js";
 
-const FLAG_KEY = "library.admin";
-const SIGNAL_KEY = "library.admin.signed-in"; // tells other tabs to re-check
+const FLAG_KEY = "library.admin"; // "1" = last confirmed state was signed in
+const EVENT_KEY = "library.admin.event"; // tells other tabs: signed-in / signed-out
 const SESSION_TIMEOUT_MS = 8000;
 const RETRY_DELAYS_MS = [3000, 10000, 30000]; // after "unavailable"
-const RECHECK_ON_FOCUS_MS = 60 * 1000; // re-check a visible tab at most once a minute
+const RECHECK_ON_FOCUS_MS = 60 * 1000; // re-check a visible admin tab at most once a minute
 
 /** Admin sign-in needs the API (builds without VITE_LIBRARY_API_URL have none). */
 export const adminSignInAvailable = API_URL !== "";
 export const ADMIN_LOGIN_URL = `${API_URL}/api/admin/login`;
 export const ADMIN_LOGOUT_URL = `${API_URL}/cdn-cgi/access/logout`;
 
-function readFlag() {
-  try {
-    return window.localStorage.getItem(FLAG_KEY) === "1";
-  } catch {
-    return false;
-  }
+const storage = {
+  get(key) {
+    try {
+      return window.localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  set(key, value) {
+    try {
+      if (value === null) window.localStorage.removeItem(key);
+      else window.localStorage.setItem(key, value);
+    } catch {
+      // Storage blocked: this tab still works; other tabs update on their next check.
+    }
+  },
+};
+const rememberedSignedIn = () => storage.get(FLAG_KEY) === "1";
+const announce = (type) => storage.set(EVENT_KEY, JSON.stringify({ type, at: Date.now() }));
+
+/** Reads and removes "?admin=signed-in" (set by the Worker after a login). */
+function consumeSignInMarker() {
+  if (typeof window === "undefined") return false;
+  const url = new URL(window.location.href);
+  if (url.searchParams.get("admin") !== "signed-in") return false;
+  url.searchParams.delete("admin");
+  window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash || "#/"}`);
+  return true;
 }
 
-function writeFlag(on) {
-  try {
-    if (on) window.localStorage.setItem(FLAG_KEY, "1");
-    else window.localStorage.removeItem(FLAG_KEY);
-  } catch {
-    // Storage blocked: sign-in still works for this page view only.
-  }
-}
-
-const SIGNED_OUT = Object.freeze({ status: "signed-out" });
-let state = adminSignInAvailable && readFlag() ? { status: "checking" } : SIGNED_OUT;
+const justSignedIn = adminSignInAvailable && consumeSignInMarker();
+const signedOut = (verified) => ({ status: "signed-out", verified });
+let state = adminSignInAvailable && (justSignedIn || rememberedSignedIn()) ? { status: "checking" } : signedOut(false);
 let signingIn = false;
 let signingOut = false;
 let lastCheckedAt = 0;
@@ -112,33 +135,35 @@ function scheduleRetry() {
 
 let pendingCheck = null;
 
-/** Asks the API who is signed in, but only if this browser is used for admin. */
+/** Page load: ask the server only after a login or in a browser used for admin. */
+export function checkAdminSessionOnLoad() {
+  if (justSignedIn || rememberedSignedIn()) return checkAdminSession();
+  return Promise.resolve(state);
+}
+
+/** Asks the API whether this browser has an admin session (the server decides). */
 export function checkAdminSession() {
   if (!adminSignInAvailable || signingIn || signingOut) return Promise.resolve(state);
-  if (!readFlag()) {
-    if (state !== SIGNED_OUT) setState(SIGNED_OUT);
-    return Promise.resolve(state);
-  }
   pendingCheck ??= (async () => {
     clearTimeout(retryTimer);
-    if (state.status === "signed-out") setState({ status: "checking" });
+    const before = state.status;
     try {
       const session = await fetchSession();
       lastCheckedAt = Date.now();
       retryCount = 0;
-      const wasSignedIn = state.status === "signed-in";
-      setState(session ? { status: "signed-in", email: session.email, expiresAt: session.expiresAt } : SIGNED_OUT);
-      if (session && !wasSignedIn) {
-        try {
-          window.localStorage.setItem(SIGNAL_KEY, String(Date.now()));
-        } catch {
-          // Other tabs will notice on their next check instead.
-        }
+      if (session) {
+        storage.set(FLAG_KEY, "1");
+        setState({ status: "signed-in", email: session.email, expiresAt: session.expiresAt });
+        if (before !== "signed-in") announce("signed-in");
+      } else {
+        storage.set(FLAG_KEY, null);
+        setState(signedOut(true));
       }
     } catch {
-      // Not an answer about the session: keep what we know and try again.
-      if (state.status !== "signed-in") setState({ status: "unavailable" });
-      scheduleRetry();
+      // Not an answer about the session: keep a confirmed session, retry if this
+      // browser is (or was) used for admin; visitors are not retried.
+      if (before !== "signed-in") setState({ status: "unavailable" });
+      if (before === "signed-in" || before === "checking" || before === "unavailable" || rememberedSignedIn()) scheduleRetry();
     } finally {
       pendingCheck = null;
     }
@@ -151,35 +176,38 @@ export function checkAdminSession() {
 export function startAdminSignIn() {
   if (!adminSignInAvailable || signingOut) return;
   signingIn = true;
-  writeFlag(true);
+  storage.set(FLAG_KEY, "1"); // the return trip shows "checking", not the visitor header
   window.location.assign(ADMIN_LOGIN_URL);
 }
 
 /**
  * Ends the Access session (Cloudflare revokes it for all Access applications;
- * the API host's cookie is removed). Other open tabs see the flag disappear
- * and drop their admin controls at once.
+ * the API host's cookie is removed). Other open tabs drop their admin
+ * controls at once.
  */
 export function signOutAdmin() {
   signingOut = true;
   clearTimeout(retryTimer);
-  writeFlag(false);
-  setState(SIGNED_OUT);
+  storage.set(FLAG_KEY, null);
+  announce("signed-out");
+  setState(signedOut(true));
   window.location.assign(ADMIN_LOGOUT_URL);
 }
 
 if (adminSignInAvailable && typeof window !== "undefined") {
-  // Another tab signed out (flag removed) or started a sign-in (flag set).
   window.addEventListener("storage", (event) => {
-    if (event.key === SIGNAL_KEY) {
-      if (state.status !== "signed-in") checkAdminSession();
+    if (event.key !== EVENT_KEY || !event.newValue) return;
+    let type;
+    try {
+      ({ type } = JSON.parse(event.newValue));
+    } catch {
       return;
     }
-    if (event.key !== FLAG_KEY && event.key !== null) return;
-    if (readFlag()) checkAdminSession();
-    else {
+    if (type === "signed-out") {
       clearTimeout(retryTimer);
-      if (state !== SIGNED_OUT) setState(SIGNED_OUT);
+      setState(signedOut(true));
+    } else if (type === "signed-in" && state.status !== "signed-in") {
+      checkAdminSession();
     }
   });
   // Back button from the sign-in/out pages restores this page from the cache:
@@ -190,9 +218,11 @@ if (adminSignInAvailable && typeof window !== "undefined") {
     signingOut = false;
     checkAdminSession();
   });
-  // Coming back to a tab: pick up sign-ins, sign-outs and expiry from elsewhere.
+  // Coming back to an admin tab: pick up sign-outs and expiry from elsewhere.
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState !== "visible" || !readFlag()) return;
+    if (document.visibilityState !== "visible") return;
+    const adminTab = state.status === "signed-in" || state.status === "unavailable" || rememberedSignedIn();
+    if (!adminTab) return;
     const expired = state.status === "signed-in" && Date.now() >= Date.parse(state.expiresAt);
     if (state.status === "unavailable" || expired || Date.now() - lastCheckedAt >= RECHECK_ON_FOCUS_MS) {
       retryCount = 0;

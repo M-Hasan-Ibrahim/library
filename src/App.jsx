@@ -6,7 +6,7 @@ import useLocationState from "./hooks/useLocationState.js";
 import AdminSignInPage from "./pages/AdminSignInPage.jsx";
 import LibraryPage from "./pages/LibraryPage.jsx";
 import NotFoundPage from "./pages/NotFoundPage.jsx";
-import { adminSignInAvailable, checkAdminSession } from "./services/adminSession.js";
+import { adminSignInAvailable, checkAdminSessionOnLoad } from "./services/adminSession.js";
 
 // Admin-only interface: a separate chunk, requested only once signed in.
 const AdminLayer = lazy(() => import("./admin/AdminLayer.jsx"));
@@ -17,7 +17,7 @@ export default function App() {
   const isLibrary = path === "/";
 
   useEffect(() => {
-    checkAdminSession();
+    checkAdminSessionOnLoad();
   }, []);
 
   let page = <NotFoundPage />;
@@ -30,10 +30,15 @@ export default function App() {
         <AdminLayer session={admin} />
       </Suspense>
     ) : null;
+  // Signed out: globe + Portfolio. Signed in: ADMIN + Sign out + Portfolio.
+  // While a returning admin's session is confirmed ("checking"), show neither.
+  const showAdminLogin = adminSignInAvailable && (admin.status === "signed-out" || admin.status === "unavailable");
 
   return (
     <>
-      <SiteLayout headerTools={adminTools}>{page}</SiteLayout>
+      <SiteLayout headerTools={adminTools} showAdminLogin={showAdminLogin}>
+        {page}
+      </SiteLayout>
       {/* The library stays mounted underneath, so closing returns to the same scroll position. */}
       {isLibrary && params.item && <ItemPanel slug={params.item} />}
     </>

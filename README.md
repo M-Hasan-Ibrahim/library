@@ -208,10 +208,18 @@ The website stays public. Only the API's `/api/admin/*` paths are protected:
 | Endpoint | Purpose |
 | -------- | ------- |
 | `GET /api/admin/session` | `{ email, expiresAt }` for the signed-in admin |
-| `GET /api/admin/login` | After Access sign-in, `302` to `SITE_URL` (`#/`); the target never comes from the request |
+| `GET /api/admin/login` | After Access sign-in, `302` to `SITE_URL` + `?admin=signed-in#/` (the site removes the marker); the target never comes from the request |
+| `GET /api/admin/`, `/api/admin/*` | Same as `/api/admin/login`: where Access lands logins started by Cloudflare itself (its logout page's "Log in" button, App Launcher) while the application's primary destination is the wildcard path |
 
 Admin responses are `no-store` and allow credentialed CORS only for
 `ALLOWED_ORIGINS`; public endpoints never allow credentials.
+
+Access application destinations (recommended order): first
+`api.library.mh-ibrahim.com/api/admin/login` (the application's primary
+domain, used by Cloudflare's own "Log in" button and the App Launcher), then
+`api.library.mh-ibrahim.com/api/admin/*` (protects every admin path). With
+only the wildcard destination, Cloudflare-started logins return to the literal
+`/api/admin/*`, which the Worker also accepts as a login landing path.
 
 Configuration: `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD` and `SITE_URL` are plain
 variables in `wrangler.jsonc`; `ADMIN_EMAIL` is a Worker secret (not stored in
@@ -220,20 +228,26 @@ public API keeps working.
 
 On the website:
 
-- **Sign in:** the outlined globe icon left of "Portfolio" ("Admin login",
-  shown to everyone) opens `#/admin`. It goes to Google through Access and
-  comes back to the library, where a small "Admin · Sign out" control appears
-  in the header. When already signed in, `#/admin` just confirms the session.
-  The icon is only a link: Access and the Worker decide who gets in.
+- **Header:** signed out — globe ("Admin login") + Portfolio; signed in —
+  "Admin · Sign out" + Portfolio (the globe is hidden). The globe opens
+  `#/admin`, which first asks the API: signed in → a confirmation, no new
+  login; signed out → Google through Access. The globe is only a link: Access
+  and the Worker decide who gets in.
+- **After any successful login** (globe, `/api/admin/login` opened directly,
+  or Cloudflare's own "Log in" button) the Worker redirects to
+  `https://library.mh-ibrahim.com/?admin=signed-in#/`. The site removes the
+  marker (leaving `/#/`) and asks `GET /api/admin/session` immediately, so
+  "Admin · Sign out" appears without any click. The marker grants nothing.
 - **Sign out:** the "Sign out" button ends the Access session
   (`/cdn-cgi/access/logout` on the API host). Cloudflare revokes it for all
   Access applications (old tokens can still be accepted for 20–30 s). Google
   itself stays signed in, so the next sign-in may not ask for a password.
-- Visitors make no admin requests: the site only checks the session in a
-  browser that has been used to sign in (a `library.admin` flag in
-  localStorage, set when a sign-in starts and removed by Sign out; a UI hint
-  that grants nothing), and the admin interface (`src/admin/`) is a separate
-  chunk loaded after the API confirms the session.
+- Visitors make no admin requests (so Access never sets a cookie for them).
+  The site asks the API only after a login (marker), in a browser whose last
+  confirmed state was "signed in" (`library.admin` in localStorage, a UI hint
+  that grants nothing), on `#/admin`, when another tab signs in, or when an
+  admin tab becomes visible again. The admin interface (`src/admin/`) is a
+  separate chunk loaded after the API confirms the session.
 - Only a definite answer means "signed out" (401/403 or a redirect to the
   Access login). Temporary problems (5xx, network) keep the current state and
   retry; `#/admin` then shows "Sign-in unavailable" with "Try again" instead of

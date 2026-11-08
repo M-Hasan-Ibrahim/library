@@ -1,11 +1,13 @@
 import { useRef } from "react";
-import { adminSignInAvailable } from "../services/adminSession.js";
 import GlobeIcon from "./GlobeIcon.jsx";
 
 const PORTFOLIO_URL = "https://mh-ibrahim.com";
 
-/** `headerTools`: admin-only controls (nothing for visitors, so their header is unchanged). */
-export default function SiteLayout({ children, headerTools = null }) {
+/**
+ * `headerTools`: admin-only controls (only when signed in).
+ * `showAdminLogin`: the "Admin login" globe (when not signed in).
+ */
+export default function SiteLayout({ children, headerTools = null, showAdminLogin = false }) {
   const mainRef = useRef(null);
 
   // The app uses hash routing, so "#main" would be read as a route. The skip
@@ -36,8 +38,8 @@ export default function SiteLayout({ children, headerTools = null }) {
           </a>
           <nav aria-label="Site">
             {headerTools}
-            {/* Shown to everyone; it only opens #/admin. Access and the Worker decide who gets in. */}
-            {adminSignInAvailable && (
+            {/* Only opens #/admin; Cloudflare Access and the Worker decide who gets in. */}
+            {showAdminLogin && (
               <a aria-label="Admin login" className="button button--icon" href="#/admin" title="Admin login">
                 <GlobeIcon />
               </a>

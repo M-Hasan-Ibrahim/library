@@ -3,6 +3,7 @@
  *
  *   GET /api/admin/session  -> { email, expiresAt } for the signed-in admin
  *   GET /api/admin/login    -> 302 to the Library website (fixed address)
+ *       (also /api/admin/, /api/admin/* — where Access lands Cloudflare-started logins)
  *
  * Every request under /api/admin/ is protected twice:
  *   1. Cloudflare Access (application "Library Admin", path api/admin/*)
@@ -36,39 +37,51 @@ function adminCors(request, env) {
  * Where /api/admin/login sends the admin after signing in. It comes only from
  * the SITE_URL variable (never from the request) and must be one of the
  * ALLOWED_ORIGINS, so the endpoint cannot be used as an open redirect.
+ * "?admin=signed-in" tells the site to ask GET /api/admin/session right away
+ * (the site then removes it, leaving https://<site>/#/). It grants nothing.
  */
+export const SIGNED_IN_MARKER = "admin=signed-in";
+
 function siteHome(env) {
   try {
     const { origin } = new URL(String(env.SITE_URL ?? ""));
-    return allowedOrigins(env).includes(origin) ? `${origin}/#/` : null;
+    return allowedOrigins(env).includes(origin) ? `${origin}/?${SIGNED_IN_MARKER}#/` : null;
   } catch {
     return null;
   }
 }
 
+const sessionRoute = {
+  methods: ["GET", "HEAD"],
+  handle: ({ request, session, headers }) =>
+    json(request, 200, { email: session.email, expiresAt: session.expiresAt }, headers),
+};
+
+const loginRoute = {
+  methods: ["GET"],
+  handle: ({ request, env, headers }) => {
+    const home = siteHome(env);
+    if (!home) {
+      console.error("Admin login: SITE_URL is missing or not in ALLOWED_ORIGINS");
+      return json(request, 503, { error: "Admin sign-in is not configured" }, headers);
+    }
+    return new Response(null, { status: 302, headers: { ...headers, Location: home } });
+  },
+};
+
 const ROUTES = new Map([
-  [
-    "/api/admin/session",
-    {
-      methods: ["GET", "HEAD"],
-      handle: ({ request, session, headers }) =>
-        json(request, 200, { email: session.email, expiresAt: session.expiresAt }, headers),
-    },
-  ],
-  [
-    "/api/admin/login",
-    {
-      methods: ["GET"],
-      handle: ({ request, env, headers }) => {
-        const home = siteHome(env);
-        if (!home) {
-          console.error("Admin login: SITE_URL is missing or not in ALLOWED_ORIGINS");
-          return json(request, 503, { error: "Admin sign-in is not configured" }, headers);
-        }
-        return new Response(null, { status: 302, headers: { ...headers, Location: home } });
-      },
-    },
-  ],
+  ["/api/admin/session", sessionRoute],
+  ["/api/admin/login", loginRoute],
+  // Logins started by Cloudflare itself (the "Log in to Library Admin" button
+  // on its logout page, an App Launcher tile) have no page to return to, so
+  // Access returns to the application's primary destination as written. While
+  // that destination is the wildcard "api/admin/*", the browser lands on these
+  // literal paths. They are only reached after the token check above and send
+  // the admin to the same fixed site address as /api/admin/login.
+  ["/api/admin/*", loginRoute],
+  ["/api/admin/%2A", loginRoute],
+  ["/api/admin/%2a", loginRoute],
+  ["/api/admin/", loginRoute],
 ]);
 
 export async function handleAdmin(request, env, pathname) {
