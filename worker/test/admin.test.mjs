@@ -209,7 +209,7 @@ describe("other admin requests", () => {
     assert.equal(res.headers.get("access-control-allow-origin"), SITE);
     assert.equal(res.headers.get("access-control-allow-credentials"), "true");
     assert.equal(res.headers.get("access-control-allow-methods"), "GET, HEAD, POST, PATCH, DELETE, OPTIONS");
-    assert.equal(res.headers.get("access-control-allow-headers"), "Content-Type");
+    assert.equal(res.headers.get("access-control-allow-headers"), "Content-Type, X-File-Name, Range"); // X-File-Name: PDF uploads; Range: reading admin files
     assert.equal(res.text, "");
   });
 

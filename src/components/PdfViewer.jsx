@@ -17,8 +17,9 @@ const isRenderCancelled = (error) => error?.name === "RenderingCancelledExceptio
  * so a PDF reads inside the same container as an article. A native <iframe>
  * PDF viewer is not used because Android browsers cannot show PDFs inline and
  * iOS Safari shows only the first page; this works the same everywhere.
+ * `withCredentials`: send the sign-in cookie (the admin's files only).
  */
-export default function PdfViewer({ url, title }) {
+export default function PdfViewer({ url, title, withCredentials = false }) {
   const pagesRef = useRef(null);
   // Inside the reading panel, the panel scrolls (not the window).
   const scrollRoot = useContext(PanelScrollContext);
@@ -43,7 +44,7 @@ export default function PdfViewer({ url, title }) {
         if (isCancelled) return;
 
         pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
-        loadingTask = pdfjs.getDocument({ url });
+        loadingTask = pdfjs.getDocument(withCredentials ? { url, withCredentials } : { url });
         const pdf = await loadingTask.promise;
         const firstPage = await pdf.getPage(1);
         const { width, height } = firstPage.getViewport({ scale: 1 });
@@ -62,7 +63,7 @@ export default function PdfViewer({ url, title }) {
       // Stops the download/worker and frees everything pdf.js allocated.
       loadingTask?.destroy();
     };
-  }, [url]);
+  }, [url, withCredentials]);
 
   // 2. Draw pages near the viewport; clear pages far from it.
   const { pdf } = documentState;

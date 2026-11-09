@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS items (
   -- { "blocks": [ { "id", "type", ... } ] }, as in src/content/bodies/*.json
   body_json       TEXT,
   reading_minutes INTEGER,                      -- articles
-  file_url        TEXT,                         -- pdf: path or URL (e.g. R2)
+  file_url        TEXT,                         -- pdf: site path, URL, or an upload (<API>/files/…, R2)
   page_count      INTEGER,                      -- pdf
   video_url       TEXT,                         -- youtube: any supported YouTube URL
   url             TEXT,                         -- link: destination
@@ -60,6 +60,9 @@ CREATE TABLE IF NOT EXISTS items (
   status          TEXT NOT NULL DEFAULT 'published' CHECK (status IN ('draft', 'published')),
   -- optimistic concurrency; every UPDATE must add exactly 1 (trigger).
   revision        INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1),
+  -- 0004 (added with ALTER TABLE ADD COLUMN, after the 0003 columns):
+  video_description TEXT,                       -- youtube: original description (public, collapsed)
+  media_json        TEXT,                       -- youtube: video information last fetched (admin only)
   CHECK (
     (type = 'article' AND body_json IS NOT NULL) OR
     (type = 'pdf'     AND file_url  IS NOT NULL) OR
@@ -109,3 +112,34 @@ CREATE TABLE IF NOT EXISTS revisions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_revisions_changed_at ON revisions (changed_at DESC);
+
+-- 0004: files uploaded by the admin to R2 (PDFs). 'uploaded' until an item is
+-- saved with the file's address ('attached'); an upload never used is removed
+-- after a day by the scheduled clean-up ('deleting', then 'deleted'). Files
+-- used by any item or revision are kept. Public only while a published item
+-- uses them.
+CREATE TABLE IF NOT EXISTS files (
+  key           TEXT PRIMARY KEY,               -- R2 object key, e.g. pdf/2026/11/k3j…-notes.pdf
+  original_name TEXT NOT NULL,                  -- file name as uploaded (for downloads)
+  size          INTEGER NOT NULL CHECK (size > 0),
+  content_type  TEXT NOT NULL,
+  sha256        TEXT NOT NULL,
+  status        TEXT NOT NULL DEFAULT 'uploaded' CHECK (status IN ('uploaded', 'attached', 'deleting', 'deleted')),
+  uploaded_by   TEXT NOT NULL,
+  uploaded_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  attached_at   TEXT,
+  deleted_at    TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_files_status_uploaded ON files (status, uploaded_at);
+
+-- 0004: a file being removed (or removed) can never be attached again.
+CREATE TRIGGER IF NOT EXISTS files_removal_final
+BEFORE UPDATE OF status ON files
+WHEN OLD.status IN ('deleting', 'deleted') AND NEW.status NOT IN ('deleting', 'deleted')
+BEGIN
+  SELECT RAISE(ABORT, 'files: a removed file cannot be used again');
+END;
+
+-- 0004: the "is this uploaded file published?" check on every file request.
+CREATE INDEX IF NOT EXISTS idx_items_file_url ON items (file_url);

@@ -1,11 +1,25 @@
+import { useContext } from "react";
 import { formatDate } from "../lib/format.js";
 import { parseYouTubeUrl, youTubeWatchUrl } from "../lib/youtube.js";
+import { API_URL } from "../services/apiConfig.js";
+import { FileAccessContext } from "./fileAccess.js";
 import LinkPreview from "./LinkPreview.jsx";
 import PdfViewer from "./PdfViewer.jsx";
 import RelatedLinks from "./RelatedLinks.jsx";
 import RichText from "./RichText.jsx";
 import { EmptyState } from "./StatusMessage.jsx";
+import VideoDescription from "./VideoDescription.jsx";
 import YouTubeEmbed from "./YouTubeEmbed.jsx";
+
+// PDFs uploaded to the API live on another host, where the browser ignores
+// the download attribute; the API sends them as a download when asked.
+const downloadHref = (fileUrl) => (API_URL && fileUrl?.startsWith(`${API_URL}/files/`) ? `${fileUrl}?download=1` : fileUrl);
+
+/** Where the reading view reads and downloads an item's file (see fileAccess.js). */
+function useFileLinks(fileUrl) {
+  const resolve = useContext(FileAccessContext);
+  return resolve?.(fileUrl) ?? { url: fileUrl, downloadUrl: downloadHref(fileUrl), withCredentials: false };
+}
 
 export const ITEM_TITLE_ID = "item-panel-title";
 
@@ -18,6 +32,7 @@ export const ITEM_TITLE_ID = "item-panel-title";
  * controls to it without restructuring the view.
  */
 export default function ItemView({ item }) {
+  const file = useFileLinks(item.fileUrl);
   return (
     <article className="reader" dir={item.dir} lang={item.language}>
       <header className="reader__header">
@@ -30,7 +45,7 @@ export default function ItemView({ item }) {
               <time dateTime={item.addedAt}>{formatDate(item.addedAt)}</time>
             </span>
           </p>
-          <HeaderAction item={item} />
+          <HeaderAction downloadUrl={file.downloadUrl} item={item} />
         </div>
         <h2 className="reader__title" id={ITEM_TITLE_ID}>
           {item.title}
@@ -38,8 +53,9 @@ export default function ItemView({ item }) {
         {item.description && <p className="lede">{item.description}</p>}
       </header>
 
-      {item.type === "pdf" && <PdfViewer key={item.fileUrl} title={item.title} url={item.fileUrl} />}
+      {item.type === "pdf" && <PdfViewer key={file.url} title={item.title} url={file.url} withCredentials={file.withCredentials} />}
       {item.type === "youtube" && <YouTubeEmbed title={item.title} url={item.videoUrl} />}
+      {item.type === "youtube" && item.videoDescription && <VideoDescription text={item.videoDescription} />}
       {item.type === "link" && <LinkPreview url={item.url} />}
 
       {item.blocks.length > 0 ? (
@@ -54,10 +70,10 @@ export default function ItemView({ item }) {
 }
 
 /** The only visible difference between types in the header: one small, discreet action. */
-function HeaderAction({ item }) {
+function HeaderAction({ item, downloadUrl }) {
   if (item.type === "pdf") {
     return (
-      <a className="button button--small" download href={item.fileUrl}>
+      <a className="button button--small" download href={downloadUrl}>
         Download
       </a>
     );

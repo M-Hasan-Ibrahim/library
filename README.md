@@ -53,9 +53,11 @@ Common fields on every item:
 | `links`       | Optional `[{ "label", "url" }]`                              |
 
 Type-specific fields: `article` → `readingMinutes` (≈ words ÷ 200);
-`pdf` → `fileUrl` (e.g. `documents/file.pdf`), `pageCount`;
+`pdf` → `fileUrl` (e.g. `documents/file.pdf`, or an uploaded file served by
+the API under `/files/`), `pageCount`;
 `youtube` → `videoUrl` (`youtube.com/watch?v=`, `youtu.be/`, `/embed/`,
-`/shorts/` or a bare ID); `link` → `url`.
+`/shorts/`, `/live/` or a bare ID) and an optional `videoDescription` (plain
+text, shown in a collapsed "Video description" section); `link` → `url`.
 
 Invalid entries are hidden and listed as a console warning during
 `npm run dev` (rules in `src/lib/validateContent.js`).
@@ -67,16 +69,20 @@ Invalid entries are hidden and listed as a console warning during
   "blocks": [
     { "id": "b01", "type": "paragraph", "text": "Text with **bold**, *italic*, `code` and [a link](https://example.com)." },
     { "id": "b02", "type": "heading", "level": 2, "text": "A section" },
-    { "id": "b03", "type": "list", "ordered": false, "items": ["One", "Two"] },
+    { "id": "b03", "type": "list", "ordered": false, "items": ["One", { "text": "Two", "list": { "ordered": true, "items": ["Nested"] } }] },
     { "id": "b04", "type": "quote", "text": "…" },
     { "id": "b05", "type": "code", "language": "shell", "text": "git log" },
-    { "id": "b06", "type": "details", "summary": "Expandable section", "blocks": [ … ] }
+    { "id": "b06", "type": "divider" },
+    { "id": "b07", "type": "details", "summary": "Expandable section", "blocks": [ … ] }
   ]
 }
 ```
 
-Link to another item with `[label](#/?item=<slug>)`. Only http(s), mailto and
-`#/` links are allowed; text is never rendered as HTML.
+Headings use levels 2–4. Lists nest up to three levels. Inline text also
+supports `***bold italic***`, and `\*` (likewise `` \` ``, `\[`, `\]`, `\(`,
+`\)`, `\\`) writes the character itself. Link to another item with
+`[label](#/?item=<slug>)`. Only http(s), mailto and `#/` links are allowed;
+text is never rendered as HTML.
 
 ### Arabic
 
@@ -111,15 +117,17 @@ backed by a D1 database), with the bundled JSON as a fallback:
 | `GET /api/categories` | `categories.json` |
 | `GET /api/languages` | `languages.json` |
 | `GET /api/items` | `items.json` (without bodies) |
-| `GET /api/items/:slug` | one `items.json` entry plus `blocks` |
+| `GET /api/items/:slug` | one `items.json` entry plus `blocks` (and a video's `videoDescription`) |
+| `GET /files/<key>` | an uploaded PDF of a published item (`?download=1` to save it) |
 
-Only published content is returned. If the API is unavailable, the site falls
-back to the bundled JSON.
+Only published content is returned, uploaded PDFs included. If the API is
+unavailable, the site falls back to the bundled JSON.
 
 ## Tests
 
 ```bash
 npm run test:worker   # API tests (run locally, no network)
+npm run test:admin    # editor model tests
 ```
 
 ## Database changes

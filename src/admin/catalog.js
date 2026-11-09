@@ -12,7 +12,7 @@
 import { useSyncExternalStore } from "react";
 import { checkAdminSession } from "../services/adminSession.js";
 import { getEditMode } from "../services/editMode.js";
-import { loadPublicLibrary } from "../services/libraryRepository.js";
+import { itemDetails, loadPublicLibrary } from "../services/libraryRepository.js";
 import { adminApi } from "./client.js";
 
 let list = null; // last GET /api/admin/items answer: { items, counts }
@@ -51,11 +51,11 @@ export const adminSource = {
       items: getEditMode() ? data.items : data.items.filter((item) => item.status === "published"),
     };
   },
-  async loadBlocks(slug) {
+  async loadDetails(slug) {
     const id = await findItemId(slug);
     if (!id) throw new Error(`Item "${slug}" was not found`);
     const { item } = await adminApi.getItem(id);
-    return Array.isArray(item?.blocks) ? item.blocks : [];
+    return itemDetails(item);
   },
   reportFailure(error) {
     setState({ availability: "unavailable", error });

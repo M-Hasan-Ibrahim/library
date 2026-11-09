@@ -6,10 +6,13 @@ import { safeHref } from "./inlineMarkup.js";
  * what components/RichText.jsx can render:
  *
  *   { id, type: "paragraph", text }
- *   { id, type: "heading", level: 2 | 3, text }
- *   { id, type: "list", ordered?: boolean, items: string[] }
+ *   { id, type: "heading", level: 2 | 3 | 4, text }
+ *   { id, type: "list", ordered?: boolean, items: Item[] }
+ *       Item = string | { text: string, list: { ordered?: boolean, items: Item[] } }
+ *       (a list item with a nested list; lists nest at most 3 deep)
  *   { id, type: "quote", text }
  *   { id, type: "code", language?: string, text }
+ *   { id, type: "divider" }
  *   { id, type: "details", summary, blocks: [...] }   (no details inside details)
  *
  * Text is plain text with the inline markup **bold**, *italic*, `code` and
@@ -20,7 +23,8 @@ import { safeHref } from "./inlineMarkup.js";
 export const BLOCK_LIMITS = Object.freeze({
   maxBlocks: 500, // all blocks, nested ones included
   maxTextLength: 20000, // per text field
-  maxListItems: 200,
+  maxListItems: 200, // per list (nested lists count separately)
+  maxListDepth: 3,
 });
 
 const BLOCK_ID = /^[a-z0-9][a-z0-9-]{0,39}$/i;
@@ -35,6 +39,7 @@ const ALLOWED_FIELDS = {
   list: ["id", "type", "ordered", "items"],
   quote: ["id", "type", "text"],
   code: ["id", "type", "language", "text"],
+  divider: ["id", "type"],
   details: ["id", "type", "summary", "blocks"],
 };
 export const BLOCK_TYPES = Object.keys(ALLOWED_FIELDS);
@@ -63,6 +68,36 @@ export function validateBlocks(blocks) {
   const problems = [];
   const seenIds = new Set();
   let count = 0;
+
+  // A list (or a nested list inside an item): ordered flag and items.
+  const checkList = (list, at, level) => {
+    if (list.ordered !== undefined && typeof list.ordered !== "boolean") problems.push(`${at}.ordered: must be true or false`);
+    if (!Array.isArray(list.items) || list.items.length === 0) {
+      problems.push(`${at}.items: must be a non-empty list`);
+      return;
+    }
+    if (list.items.length > BLOCK_LIMITS.maxListItems) {
+      problems.push(`${at}.items: at most ${BLOCK_LIMITS.maxListItems} items`);
+      return;
+    }
+    list.items.forEach((item, i) => {
+      const where = `${at}.items[${i}]`;
+      if (typeof item === "string") {
+        const problem = textProblem(item);
+        if (problem) problems.push(`${where}: ${problem}`);
+        return;
+      }
+      if (!isPlainObject(item) || Object.keys(item).some((key) => key !== "text" && key !== "list") || !isPlainObject(item.list)) {
+        problems.push(`${where}: must be text, or { text, list } for a nested list`);
+        return;
+      }
+      const problem = textProblem(item.text);
+      if (problem) problems.push(`${where}.text: ${problem}`);
+      if (Object.keys(item.list).some((key) => key !== "ordered" && key !== "items")) problems.push(`${where}.list: only "ordered" and "items" are allowed`);
+      if (level >= BLOCK_LIMITS.maxListDepth) problems.push(`${where}.list: lists nest at most ${BLOCK_LIMITS.maxListDepth} levels deep`);
+      else checkList(item.list, `${where}.list`, level + 1);
+    });
+  };
 
   const visit = (list, path, depth) => {
     if (!Array.isArray(list)) {
@@ -102,18 +137,13 @@ export function validateBlocks(blocks) {
           check("text", block.text);
           break;
         case "heading":
-          if (block.level !== 2 && block.level !== 3) problems.push(`${at}.level: must be 2 or 3`);
+          if (![2, 3, 4].includes(block.level)) problems.push(`${at}.level: must be 2, 3 or 4`);
           check("text", block.text);
           break;
         case "list":
-          if (block.ordered !== undefined && typeof block.ordered !== "boolean") problems.push(`${at}.ordered: must be true or false`);
-          if (!Array.isArray(block.items) || block.items.length === 0) {
-            problems.push(`${at}.items: must be a non-empty list`);
-          } else if (block.items.length > BLOCK_LIMITS.maxListItems) {
-            problems.push(`${at}.items: at most ${BLOCK_LIMITS.maxListItems} items`);
-          } else {
-            block.items.forEach((item, i) => check(`items[${i}]`, item));
-          }
+          checkList(block, at, 1);
+          break;
+        case "divider":
           break;
         case "code":
           if (block.language !== undefined && (typeof block.language !== "string" || !CODE_LANGUAGE.test(block.language))) {

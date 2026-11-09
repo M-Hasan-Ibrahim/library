@@ -11,6 +11,14 @@
     "test:admin": "node --test --disable-warning=ExperimentalWarning \"test/admin/*.test.mjs\""
   },
   "dependencies": {
+    "@tiptap/core": "3.32.0",
+    "@tiptap/extension-blockquote": "3.32.0",
+    "@tiptap/extension-heading": "3.32.0",
+    "@tiptap/extension-list": "3.32.0",
+    "@tiptap/extensions": "3.32.0",
+    "@tiptap/pm": "3.32.0",
+    "@tiptap/react": "3.32.0",
+    "@tiptap/starter-kit": "3.32.0",
     "pdfjs-dist": "^6.1.200",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"

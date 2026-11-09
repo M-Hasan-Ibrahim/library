@@ -159,10 +159,13 @@ export default function AdminItem({ slug, toolsElement, closeGuardRef }) {
           setMode("view");
           setNotice("Showing the latest version. Your changes were discarded.");
         }}
-        onSaved={(saved) => {
+        onSaved={(saved, { notice: message, published } = {}) => {
           apply(saved);
           setMode("view");
-          setNotice(saved.status === "published" ? "Saved. Visitors see the new version now." : "Saved.");
+          setNotice(
+            message ??
+              (published ? "Saved and published. Visitors can see it now." : saved.status === "published" ? "Saved. Visitors see the new version now." : "Saved."),
+          );
           refreshLibrary();
         }}
         restored={edit.restored}

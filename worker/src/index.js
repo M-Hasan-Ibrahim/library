@@ -6,8 +6,13 @@
  *   GET /api/languages      languages.json shape
  *   GET /api/items          items.json shape (no bodies)
  *   GET /api/items/:slug    one items.json entry + "blocks" (rich text)
+ *   GET /files/<key>        an uploaded PDF from R2, only while a published item
+ *                           uses it (files.js; Range and ?download=1)
  *
  * Only GET, HEAD and OPTIONS are accepted; there is no write path.
+ *
+ * scheduled (Cron Trigger in wrangler.jsonc, hourly): removes uploaded files
+ * that nothing uses, a day after their upload (files.js cleanupOrphans).
  * CORS: only origins listed in the ALLOWED_ORIGINS variable receive
  * Access-Control-Allow-Origin. The data is public, so other clients are not
  * blocked; browsers on other sites simply cannot read the responses.
@@ -17,6 +22,7 @@
  */
 import { handleAdmin, isAdminPath } from "./admin.js";
 import { getCategories, getItem, getItems, getLanguages, getLibrary } from "./content.js";
+import { cleanupOrphans, servePublicFile } from "./files.js";
 import { allowedOrigin, json } from "./http.js";
 
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -82,6 +88,15 @@ export default {
       return respond(request, 405, { error: "Method not allowed" }, { ...cors, Allow: "GET, HEAD, OPTIONS" });
     }
 
+    if (pathname.startsWith("/files/")) {
+      try {
+        return await servePublicFile(request, env, pathname.slice("/files/".length));
+      } catch (error) {
+        console.error("File read error:", error instanceof Error ? error.message : error);
+        return respond(request, 500, { error: "Internal error" }, cors);
+      }
+    }
+
     try {
       const data = await route(pathname, env.DB);
       if (data === undefined) return respond(request, 404, { error: "Not found" }, cors);
@@ -91,5 +106,10 @@ export default {
       console.error("Library API error:", error instanceof Error ? error.message : error);
       return respond(request, 500, { error: "Internal error" }, cors);
     }
+  },
+
+  async scheduled(controller, env) {
+    const removed = await cleanupOrphans(env);
+    console.log(`Scheduled clean-up (${controller?.cron ?? "manual"}): ${removed.length} unused upload(s) removed`);
   },
 };

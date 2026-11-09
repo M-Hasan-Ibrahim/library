@@ -3,7 +3,10 @@
  * shared content rules (src/lib) on the complete resulting item.
  *
  * Create:  { type, slug?, categoryId, language, title, description?, tags?,
- *            links?, addedAt?, blocks?, fileUrl?, pageCount?, videoUrl?, url? }
+ *            links?, addedAt?, blocks?, fileUrl?, pageCount?, videoUrl?,
+ *            videoDescription?, videoInfo?, url? }
+ *          (videoDescription: the video's original description, shown to
+ *           visitors; videoInfo: what was last fetched from YouTube, admin only)
  * Update:  { revision, <any editable field> }   (only the fields sent change)
  *
  * Never accepted from the client: id, status (publish/unpublish endpoints),
@@ -29,6 +32,8 @@ export const LIMITS = Object.freeze({
   fileUrl: 500,
   pageCount: 5000,
   bodyBytes: 200_000, // serialized rich text
+  videoDescription: 5000, // YouTube's own maximum
+  videoInfoBytes: 20_000,
 });
 
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -39,7 +44,38 @@ const LOCAL_PDF = /^documents\/[a-z0-9][a-z0-9._-]{0,150}\.pdf$/;
 const WEB_URL = /^https?:\/\/[^\s]+$/i;
 
 const COMMON_FIELDS = ["categoryId", "language", "title", "description", "tags", "links", "addedAt", "blocks"];
-const TYPE_FIELDS = { article: [], pdf: ["fileUrl", "pageCount"], youtube: ["videoUrl"], link: ["url"] };
+const TYPE_FIELDS = { article: [], pdf: ["fileUrl", "pageCount"], youtube: ["videoUrl", "videoDescription", "videoInfo"], link: ["url"] };
+const MULTILINE_CONTROL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/; // tab and new lines allowed
+const YOUTUBE_PAGE = /^https:\/\/(www\.)?youtube\.com\/[^\s]*$/;
+const YOUTUBE_IMAGE = /^https:\/\/([a-z0-9-]+\.)*(ytimg|ggpht|googleusercontent)\.com\/[^\s]*$/;
+
+/** The video information last fetched from YouTube (or null to clear it). */
+function videoInfoRule(v) {
+  if (v === null) return [null, ""];
+  if (!isPlainObject(v)) return [undefined, "must be an object or null"];
+  const allowed = ["source", "fetchedAt", "videoId", "title", "description", "tags", "channelTitle", "channelUrl", "thumbnailUrl", "publishedAt"];
+  const extra = Object.keys(v).filter((key) => !allowed.includes(key));
+  if (extra.length) return [undefined, `${extra[0]} is not an accepted field`];
+  if (!["youtube-api", "youtube-oembed"].includes(v.source)) return [undefined, "source must be youtube-api or youtube-oembed"];
+  if (typeof v.videoId !== "string" || !/^[A-Za-z0-9_-]{11}$/.test(v.videoId)) return [undefined, "videoId must be a YouTube video id"];
+  if (typeof v.fetchedAt !== "string" || Number.isNaN(Date.parse(v.fetchedAt))) return [undefined, "fetchedAt must be a date"];
+  const text = (key, max, multiline = false) => {
+    if (v[key] === undefined || v[key] === null) return "";
+    if (typeof v[key] !== "string" || v[key].length > max) return `${key} must be text of at most ${max} characters`;
+    if ((multiline ? MULTILINE_CONTROL : CONTROL_CHARS).test(v[key])) return `${key} contains control characters`;
+    return "";
+  };
+  const problem =
+    text("title", LIMITS.title) || text("description", LIMITS.videoDescription, true) || text("channelTitle", 200) || text("publishedAt", 40);
+  if (problem) return [undefined, problem];
+  if (v.tags !== undefined && !(Array.isArray(v.tags) && v.tags.length <= 60 && v.tags.every((tag) => typeof tag === "string" && tag.length <= 100 && !CONTROL_CHARS.test(tag)))) {
+    return [undefined, "tags must be a list of at most 60 short words"];
+  }
+  if (v.channelUrl != null && !(typeof v.channelUrl === "string" && v.channelUrl.length <= 300 && YOUTUBE_PAGE.test(v.channelUrl))) return [undefined, "channelUrl must be a youtube.com address"];
+  if (v.thumbnailUrl != null && !(typeof v.thumbnailUrl === "string" && v.thumbnailUrl.length <= 500 && YOUTUBE_IMAGE.test(v.thumbnailUrl))) return [undefined, "thumbnailUrl must be a YouTube image address"];
+  if (new TextEncoder().encode(JSON.stringify(v)).length > LIMITS.videoInfoBytes) return [undefined, "is too large"];
+  return [v, ""];
+}
 
 /** A request that cannot be saved; `fields` maps a field (path) to a readable reason. */
 export class ValidationError extends Error {
@@ -107,9 +143,12 @@ const RULES = {
     if (new TextEncoder().encode(JSON.stringify({ blocks: v })).length > LIMITS.bodyBytes) return [undefined, "text is too long (200 KB maximum)"];
     return [v, ""];
   },
-  fileUrl: (v) => {
+  // ownFiles: this API's own /files/ address. An upload there is accepted as
+  // is (its key and record are checked when the item is saved), so a local
+  // http:// test API works too.
+  fileUrl: (v, { ownFiles } = {}) => {
     const url = typeof v === "string" ? v.trim() : "";
-    return url && url.length <= LIMITS.fileUrl && (LOCAL_PDF.test(url) || /^https:\/\/[^\s]+$/i.test(url))
+    return url && url.length <= LIMITS.fileUrl && (LOCAL_PDF.test(url) || /^https:\/\/[^\s]+$/i.test(url) || Boolean(ownFiles && url.startsWith(ownFiles)))
       ? [url, ""]
       : [undefined, 'must be a site file like "documents/name.pdf" or an https:// URL'];
   },
@@ -122,16 +161,24 @@ const RULES = {
     const url = typeof v === "string" ? v.trim() : "";
     return url && url.length <= LIMITS.url && WEB_URL.test(url) ? [url, ""] : [undefined, "must be an http(s) URL"];
   },
+  videoDescription: (v) => {
+    if (typeof v !== "string") return [undefined, "must be text"];
+    const text = v.replace(/\r\n?/g, "\n").trim();
+    if (text.length > LIMITS.videoDescription) return [undefined, `must be at most ${LIMITS.videoDescription} characters`];
+    if (MULTILINE_CONTROL.test(text)) return [undefined, "contains control characters"];
+    return [text, ""];
+  },
+  videoInfo: videoInfoRule,
 };
 
-function readFields(input, allowed, errors) {
+function readFields(input, allowed, errors, options = {}) {
   const fields = {};
   for (const [key, value] of Object.entries(input)) {
     if (!allowed.includes(key)) {
       errors[key] = "is not an accepted field here";
       continue;
     }
-    const [normalised, problem] = RULES[key](value);
+    const [normalised, problem] = RULES[key](value, options);
     if (problem) errors[key] = problem;
     else fields[key] = normalised;
   }
@@ -140,14 +187,17 @@ function readFields(input, allowed, errors) {
 
 /* ------------------------------------------------------------ create / update input */
 
-/** @returns {{ type: string, slug?: string, fields: object }} */
-export function parseCreateInput(input) {
+/**
+ * @param {{ ownFiles?: string }} options  see RULES.fileUrl
+ * @returns {{ type: string, slug?: string, fields: object }}
+ */
+export function parseCreateInput(input, options = {}) {
   if (!isPlainObject(input)) throw new ValidationError({ body: "must be a JSON object" });
   const errors = {};
   const type = CONTENT_TYPE_IDS.includes(input.type) ? input.type : null;
   if (!type) errors.type = `is required: one of ${CONTENT_TYPE_IDS.join(", ")}`;
   const allowed = ["type", "slug", ...COMMON_FIELDS, ...(type ? TYPE_FIELDS[type] : [])];
-  const fields = readFields(input, allowed, errors);
+  const fields = readFields(input, allowed, errors, options);
   for (const required of ["categoryId", "language", "title"]) {
     if (!(required in input)) errors[required] ??= "is required";
   }
@@ -161,7 +211,7 @@ export function parseCreateInput(input) {
 }
 
 /** @returns {{ revision: number, fields: object }} */
-export function parseUpdateInput(input, type) {
+export function parseUpdateInput(input, type, options = {}) {
   if (!isPlainObject(input)) throw new ValidationError({ body: "must be a JSON object" });
   const errors = {};
   const { revision, ...changes } = input;
@@ -174,6 +224,7 @@ export function parseUpdateInput(input, type) {
     Object.fromEntries(Object.entries(changes).filter(([key]) => !(key in errors))),
     editable,
     errors,
+    options,
   );
   if (!Object.keys(errors).length && Object.keys(fields).length === 0) errors.body = "contains no changes";
   if (Object.keys(errors).length) throw new ValidationError(errors);
@@ -212,6 +263,8 @@ export function applyFields(row, fields, type) {
   if ("pageCount" in fields) next.page_count = fields.pageCount;
   if ("videoUrl" in fields) next.video_url = fields.videoUrl;
   if ("url" in fields) next.url = fields.url;
+  if ("videoDescription" in fields) next.video_description = fields.videoDescription === "" ? null : fields.videoDescription;
+  if ("videoInfo" in fields) next.media_json = fields.videoInfo === null ? null : JSON.stringify(fields.videoInfo);
   return next;
 }
 
@@ -235,6 +288,8 @@ export function newRow({ id, slug, type, fields }) {
     page_count: null,
     video_url: null,
     url: null,
+    video_description: null,
+    media_json: null,
     status: "draft",
     revision: 1,
   };

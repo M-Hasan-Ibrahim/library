@@ -657,10 +657,30 @@ pre:focus-visible {
   line-height: 1.3;
 }
 
+.rich-text h5 {
+  margin: 1.4em 0 0.45em;
+  font-size: 1.06rem;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.rich-text hr {
+  height: 1px;
+  margin: 2em 0;
+  border: 0;
+  background: var(--border);
+}
+
 .rich-text ul,
 .rich-text ol {
   margin: 0 0 1.15em;
   padding-inline-start: 1.4em;
+}
+
+/* Nested lists (an item with its own list). */
+.rich-text li > ul,
+.rich-text li > ol {
+  margin: 0.45em 0 0;
 }
 
 .rich-text li {
@@ -791,6 +811,53 @@ pre:focus-visible {
   width: 100%;
   height: 100%;
   border: 0;
+}
+
+/* ---------- Video description (collapsed under the player) ---------- */
+
+.video-description {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(231, 226, 220, 0.6);
+}
+
+.video-description summary {
+  cursor: pointer;
+  padding: 12px 18px;
+  border-radius: var(--radius);
+  color: var(--ink);
+  font-size: 0.95rem;
+  font-weight: 780;
+}
+
+.video-description summary::marker {
+  color: var(--rose);
+}
+
+.video-description summary:hover {
+  background: rgba(222, 226, 225, 0.8);
+}
+
+.video-description[open] summary {
+  border-bottom: 1px solid var(--border-subtle);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.video-description__text {
+  padding: 14px 18px 16px;
+  color: var(--ink);
+  font-size: 0.95rem;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+  unicode-bidi: plaintext;
+  white-space: pre-line;
+}
+
+.video-description__text a {
+  text-decoration: underline;
+  text-decoration-color: rgba(35, 50, 48, 0.35);
+  text-underline-offset: 3px;
 }
 
 /* ---------- External link ---------- */

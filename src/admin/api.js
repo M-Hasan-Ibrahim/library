@@ -51,7 +51,9 @@ function classify(status, body) {
   if (status === 409) return "conflict";
   if (status === 413) return "too_large";
   if (status === 422) return "validation";
-  if (status === 400 || status === 415) return "bad_request";
+  if (status === 429) return "rate_limited";
+  if (status === 400 || status === 411 || status === 415) return "bad_request";
+  if (status === 0) return "network";
   return "server";
 }
 
@@ -116,7 +118,53 @@ export function createAdminApi({ baseUrl, fetch: fetchImpl = (...args) => global
       return request("GET", itemPath(id, `/revisions/${revision}`));
     },
     deletedItems: () => request("GET", "/api/admin/deleted-items"),
+    session: () => request("GET", "/api/admin/session"),
+    youtubeInfo: async (videoId) => {
+      if (typeof videoId !== "string" || !/^[A-Za-z0-9_-]{11}$/.test(videoId)) throw new AdminApiError("bad_request", { message: "Invalid video id" });
+      return request("GET", `/api/admin/youtube/${videoId}`);
+    },
   };
+}
+
+/**
+ * Uploads one PDF to POST /api/admin/files with upload progress (fetch has
+ * none, so this uses XMLHttpRequest). Resolves to { file: { key, url, name,
+ * size } }; rejects with AdminApiError. `onProgress(sent, total)`;
+ * `signal` (AbortSignal) cancels. Redirects cannot be stopped here, so the
+ * caller checks the session first (an expired session then shows up as
+ * kind "network").
+ */
+export function uploadPdf(baseUrl, file, { onProgress = () => {}, signal } = {}) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${baseUrl}/api/admin/files`);
+    xhr.withCredentials = true;
+    xhr.timeout = 10 * 60 * 1000;
+    xhr.setRequestHeader("Content-Type", "application/pdf");
+    xhr.setRequestHeader("X-File-Name", encodeURIComponent(file.name ?? "document.pdf"));
+    xhr.setRequestHeader("Accept", "application/json");
+    xhr.upload.onprogress = (event) => onProgress(event.loaded, event.lengthComputable ? event.total : file.size);
+    const abort = () => xhr.abort();
+    signal?.addEventListener("abort", abort, { once: true });
+    const done = (fn) => {
+      signal?.removeEventListener("abort", abort);
+      fn();
+    };
+    xhr.onload = () => {
+      let body = null;
+      try {
+        body = JSON.parse(xhr.responseText);
+      } catch {
+        body = null;
+      }
+      if (xhr.status === 201 && body?.file?.url) done(() => resolve(body));
+      else done(() => reject(new AdminApiError(xhr.status === 413 ? "too_large" : classify(xhr.status, body), { status: xhr.status, body })));
+    };
+    xhr.onerror = () => done(() => reject(new AdminApiError("network", { message: "The upload could not reach the server" })));
+    xhr.ontimeout = () => done(() => reject(new AdminApiError("timeout", { message: "The upload took too long" })));
+    xhr.onabort = () => done(() => reject(new AdminApiError("aborted", { message: "Upload cancelled" })));
+    xhr.send(file);
+  });
 }
 
 /** A short, plain-language description of a failure, for the admin. */
@@ -131,15 +179,21 @@ export function describeError(error) {
     case "forbidden":
       return "The server refused this request because it did not come from the Library website.";
     case "too_large":
-      return "This is too large to save (256 KB at most).";
+      return error.body?.error ?? "This is too large to save (256 KB at most).";
+    case "rate_limited":
+      return error.body?.error ?? "Too many requests. Wait a minute and try again.";
     case "not_found":
-      return "This item no longer exists. It may have been deleted elsewhere.";
+      return error.body?.code === "video_not_found" ? error.body.error : "This item no longer exists. It may have been deleted elsewhere.";
     case "conflict":
       return "This item was changed elsewhere since it was opened.";
     case "validation":
       return "Some fields are not valid.";
     case "bad_request":
       return error.body?.error ?? "The server could not read this request.";
+    case "aborted":
+      return "Cancelled.";
+    case "server":
+      return error.body?.error && error.status >= 500 && error.body?.code ? error.body.error : "The server had a problem. Try again in a moment.";
     default:
       return "The server had a problem. Try again in a moment.";
   }

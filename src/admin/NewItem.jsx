@@ -5,7 +5,7 @@ import { closeItem, openItem } from "../router.js";
 import { setEditMode } from "../services/editMode.js";
 import { refreshLibrary } from "../services/libraryRepository.js";
 import { rememberItem } from "./catalog.js";
-import { emptyForm, newBlockId, reviveForm } from "./editorModel.js";
+import { emptyForm, reviveForm } from "./editorModel.js";
 import { setPanelNotice } from "./flash.js";
 import ItemEditor from "./ItemEditor.jsx";
 import { PanelTools, useLibraryMeta } from "./ui.jsx";
@@ -39,7 +39,6 @@ export default function NewItem({ toolsElement, closeGuardRef }) {
     const form = emptyForm(type, {
       categoryId: meta.categories[0]?.id ?? "",
       language: meta.languages.some((language) => language.code === "en") ? "en" : (meta.languages[0]?.code ?? ""),
-      makeId: () => newBlockId([]),
     });
     setStart({ type, form, base: form, restored: false });
   };
@@ -55,11 +54,14 @@ export default function NewItem({ toolsElement, closeGuardRef }) {
         meta={meta}
         onCancel={closeItem}
         onChangeType={() => setStart(null)}
-        onSaved={(item) => {
+        onSaved={(item, { notice } = {}) => {
           rememberItem(item);
           refreshLibrary();
-          setPanelNotice(item.slug, "Saved as a draft. Only you can see it until you publish it.");
-          openItem(item.slug); // the same panel now shows the new draft
+          setPanelNotice(
+            item.slug,
+            notice ?? (item.status === "published" ? "Published. Visitors can see it now." : "Saved as a draft. Only you can see it until you publish it."),
+          );
+          openItem(item.slug); // the same panel now shows the new item
         }}
         restored={start.restored}
         storageKey="new"

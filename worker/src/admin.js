@@ -20,10 +20,16 @@
  *   GET    /api/admin/items/:id/revisions/:rev   one version's full content
  *   POST   /api/admin/items/:id/restore          { revision, fromRevision }
  *   GET    /api/admin/deleted-items              deleted items that can be restored
+ *   GET    /api/admin/youtube/:videoId           video information (youtube.js)
+ *   POST   /api/admin/files                      upload a PDF to R2 (files.js)     201
+ *   GET    /api/admin/files/<key>                read an upload: drafts, history, unsaved
+ *                                                (files.js; Range and ?download=1)
  *
  * Writes (POST/PATCH/DELETE) also require: Origin exactly in ALLOWED_ORIGINS
  * and Sec-Fetch-Site same-site/same-origin when sent (CSRF), Content-Type
  * application/json (forces a CORS preflight), and a body of at most 256 KB.
+ * The upload route instead takes Content-Type application/pdf (also a
+ * preflighted type) and up to 25 MB, checked by files.js.
  * CORS: only admin responses allow credentials, and only for ALLOWED_ORIGINS;
  * public endpoints (index.js) never allow credentials. Every admin response
  * is no-store.
@@ -42,8 +48,10 @@ import {
   setItemStatus,
   updateItem,
 } from "./adminItems.js";
+import { serveAdminFile, uploadPdf } from "./files.js";
 import { allowedOrigin, allowedOrigins, json } from "./http.js";
 import { ValidationError } from "./itemInput.js";
+import { youtubeInfo } from "./youtube.js";
 
 const ADMIN_PREFIX = "/api/admin/";
 const NO_STORE = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex" };
@@ -84,7 +92,7 @@ function siteHome(env) {
 /* ------------------------------------------------------------ requests */
 
 /** CSRF and format checks for POST / PATCH / DELETE (null when fine). */
-function writeRequestProblem(request, env) {
+function writeRequestProblem(request, env, { upload = false } = {}) {
   const origin = request.headers.get("Origin");
   if (!origin || !allowedOrigins(env).includes(origin)) {
     return [403, { error: "Writes are only accepted from the Library website", code: "forbidden_origin" }];
@@ -93,6 +101,7 @@ function writeRequestProblem(request, env) {
   if (fetchSite && fetchSite !== "same-site" && fetchSite !== "same-origin") {
     return [403, { error: "Cross-site write refused", code: "forbidden_origin" }];
   }
+  if (upload) return null; // type and size are checked by files.js
   if (!/^application\/json\s*(;|$)/i.test(request.headers.get("Content-Type") ?? "")) {
     return [415, { error: "Send JSON (Content-Type: application/json)", code: "unsupported_media_type" }];
   }
@@ -145,16 +154,20 @@ const STATIC_ROUTES = new Map([
   ["/api/admin/", loginRoute],
   ["/api/admin/items", {
     GET: ({ env }) => listItems(env.DB).then((data) => ok(200, data)),
-    POST: async ({ env, request, session }) => ok(201, await createItem(env.DB, await readJson(request), session.email)),
+    POST: async ({ env, request, session }) => ok(201, await createItem(env.DB, await readJson(request), session.email, env)),
   }],
   ["/api/admin/deleted-items", { GET: ({ env }) => deletedItems(env.DB).then((data) => ok(200, data)) }],
+  ["/api/admin/files", {
+    upload: true,
+    POST: async ({ env, request, session }) => ok(201, await uploadPdf(request, env, session.email)),
+  }],
 ]);
 
 const ITEM_ID = "(itm_[a-z0-9]+(?:_[a-z0-9]+)*)";
 const PATTERN_ROUTES = [
   [new RegExp(`^/api/admin/items/${ITEM_ID}$`), {
     GET: ({ env, params: [id] }) => getItem(env.DB, id).then((data) => ok(200, data)),
-    PATCH: async ({ env, request, session, params: [id] }) => ok(200, await updateItem(env.DB, id, await readJson(request), session.email)),
+    PATCH: async ({ env, request, session, params: [id] }) => ok(200, await updateItem(env.DB, id, await readJson(request), session.email, env)),
     DELETE: async ({ env, request, session, params: [id] }) => ok(200, await deleteItem(env.DB, id, await readJson(request), session.email)),
   }],
   [new RegExp(`^/api/admin/items/${ITEM_ID}/publish$`), {
@@ -164,7 +177,7 @@ const PATTERN_ROUTES = [
     POST: async ({ env, request, session, params: [id] }) => ok(200, await setItemStatus(env.DB, id, await readJson(request), session.email, "draft")),
   }],
   [new RegExp(`^/api/admin/items/${ITEM_ID}/restore$`), {
-    POST: async ({ env, request, session, params: [id] }) => ok(200, await restoreItem(env.DB, id, await readJson(request), session.email)),
+    POST: async ({ env, request, session, params: [id] }) => ok(200, await restoreItem(env.DB, id, await readJson(request), session.email, env)),
   }],
   [new RegExp(`^/api/admin/items/${ITEM_ID}/revisions$`), {
     GET: ({ env, params: [id] }) => itemHistory(env.DB, id).then((data) => ok(200, data)),
@@ -172,20 +185,27 @@ const PATTERN_ROUTES = [
   [new RegExp(`^/api/admin/items/${ITEM_ID}/revisions/([1-9][0-9]{0,8})$`), {
     GET: ({ env, params: [id, revision] }) => itemRevision(env.DB, id, Number(revision)).then((data) => ok(200, data)),
   }],
+  [/^\/api\/admin\/youtube\/([A-Za-z0-9_-]{11})$/, {
+    GET: ({ env, params: [videoId] }) => youtubeInfo(videoId, env).then((data) => ok(200, data)),
+  }],
+  // The key's own pattern (files.js FILE_KEY) bounds it to 93 characters.
+  [/^\/api\/admin\/files\/(pdf\/\d{4}\/\d{2}\/[a-z0-9]{16}-[a-z0-9-]{1,60}\.pdf)$/, {
+    GET: ({ request, env, headers, params: [key] }) => serveAdminFile(request, env, key, headers),
+  }, 96],
 ];
 
 function matchRoute(pathname) {
   const exact = STATIC_ROUTES.get(pathname);
   if (exact) return { route: exact, params: [] };
-  for (const [pattern, route] of PATTERN_ROUTES) {
+  for (const [pattern, route, maxLength = 64] of PATTERN_ROUTES) {
     const match = pattern.exec(pathname);
-    if (match && match[1].length <= 64) return { route, params: match.slice(1) };
+    if (match && match[1].length <= maxLength) return { route, params: match.slice(1) };
   }
   return null;
 }
 
 const allowedMethods = (route) => {
-  const methods = Object.keys(route);
+  const methods = Object.keys(route).filter((key) => key === key.toUpperCase());
   if (methods.includes("GET")) methods.splice(methods.indexOf("GET") + 1, 0, "HEAD");
   return methods.join(", ");
 };
@@ -202,7 +222,8 @@ export async function handleAdmin(request, env, pathname) {
     const preflight = { ...cors };
     if (cors["Access-Control-Allow-Origin"]) {
       preflight["Access-Control-Allow-Methods"] = PREFLIGHT_METHODS;
-      preflight["Access-Control-Allow-Headers"] = "Content-Type";
+      // Range: the site's PDF viewer reads an admin file piece by piece.
+      preflight["Access-Control-Allow-Headers"] = "Content-Type, X-File-Name, Range";
       preflight["Access-Control-Max-Age"] = "600";
     }
     return new Response(null, { status: 204, headers: preflight });
@@ -235,7 +256,7 @@ export async function handleAdmin(request, env, pathname) {
     return json(request, 405, { error: "Method not allowed" }, { ...headers, Allow: allowedMethods(match.route) });
   }
   if (WRITE_METHODS.has(request.method)) {
-    const problem = writeRequestProblem(request, env);
+    const problem = writeRequestProblem(request, env, { upload: match.route.upload === true });
     if (problem) return json(request, problem[0], problem[1], headers);
   }
 

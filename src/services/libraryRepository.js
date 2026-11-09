@@ -40,14 +40,22 @@ const jsonSource = {
   async loadLibrary() {
     return { categories: categoriesData, languages: languagesData, items: itemsData };
   },
-  /** Blocks for one item ([] when it has no body file). */
-  async loadBlocks(slug) {
+  /** Details for one item (no blocks when it has no body file). */
+  async loadDetails(slug) {
     const loadBody = bodyLoaders[`../content/bodies/${slug}.json`];
-    if (!loadBody) return [];
-    const body = await loadBody();
-    return Array.isArray(body?.blocks) ? body.blocks : [];
+    return itemDetails(loadBody ? await loadBody() : null);
   },
 };
+
+/**
+ * The fields only the single-item answer carries (the library list leaves
+ * them out): the text blocks, and a YouTube item's original description.
+ */
+export function itemDetails(data) {
+  const details = { blocks: Array.isArray(data?.blocks) ? data.blocks : [] };
+  if (typeof data?.videoDescription === "string" && data.videoDescription.trim()) details.videoDescription = data.videoDescription;
+  return details;
+}
 
 // Set once the admin has been signed in in this tab: public responses may be
 // cached by the browser for a minute, so from then on they are revalidated
@@ -80,11 +88,11 @@ const apiSource = {
     }
     return data;
   },
-  async loadBlocks(slug) {
+  async loadDetails(slug) {
     const data = await fetchApi(`/api/items/${encodeURIComponent(slug)}`);
     if (data === null) throw new Error(`Item "${slug}" is missing from the API`);
     if (!Array.isArray(data.blocks)) throw new Error(`Unexpected /api/items/${slug} response`);
-    return data.blocks;
+    return itemDetails(data);
   },
 };
 
@@ -181,25 +189,26 @@ export async function getLibrary() {
 }
 
 /**
- * One item plus its text blocks (articles always have blocks; other types may
- * carry optional extra text). Resolves to null when the item does not exist.
+ * One item plus its details: text blocks (articles always have blocks; other
+ * types may carry optional extra text) and, for a video, its original
+ * description. Resolves to null when the item does not exist.
  */
 export async function getItem(slug) {
   const catalog = await loadCatalog();
   const summary = catalog.items.find((item) => item.slug === slug);
   if (!summary) return null;
 
-  let blocks;
+  let details;
   try {
-    blocks = await catalog.source.loadBlocks(slug);
+    details = await catalog.source.loadDetails(slug);
   } catch (error) {
     // Only the public API falls back to the bundled text; the admin never
     // reads (possibly outdated) bundled text in place of the database.
     if (catalog.source !== apiSource) throw error;
     warnFallback(`item "${slug}"`, error);
-    blocks = await jsonSource.loadBlocks(slug);
+    details = await jsonSource.loadDetails(slug);
   }
-  return { ...summary, blocks };
+  return { ...summary, ...details };
 }
 
 /* ---------------------------------------------------------------- admin hooks */
@@ -220,7 +229,7 @@ export function refreshLibrary() {
 
 /**
  * Plugs in (or removes, with null) the admin data source. It must offer
- * loadLibrary() and loadBlocks(slug) like the sources above, and may offer
+ * loadLibrary() and loadDetails(slug) like the sources above, and may offer
  * reportFailure(error).
  */
 export function setAdminSource(source) {

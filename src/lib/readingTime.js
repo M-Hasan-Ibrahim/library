@@ -10,12 +10,23 @@ export function readingMinutes(blocks) {
   return Math.max(1, Math.ceil(words / 200));
 }
 
+// List items are text, or { text, list } with a nested list.
+function itemsText(items) {
+  return (Array.isArray(items) ? items : [])
+    .map((item) => {
+      if (typeof item === "string") return inlineToPlainText(item);
+      const own = typeof item?.text === "string" ? inlineToPlainText(item.text) : "";
+      return `${own} ${itemsText(item?.list?.items)}`;
+    })
+    .join(" ");
+}
+
 function blockText(blocks) {
   return (Array.isArray(blocks) ? blocks : [])
     .flatMap((block) => [
       typeof block.text === "string" ? (block.type === "code" ? block.text : inlineToPlainText(block.text)) : "",
       typeof block.summary === "string" ? inlineToPlainText(block.summary) : "",
-      ...(Array.isArray(block.items) ? block.items.map((item) => (typeof item === "string" ? inlineToPlainText(item) : "")) : []),
+      itemsText(block.items),
       Array.isArray(block.blocks) ? blockText(block.blocks) : "",
     ])
     .join(" ");

@@ -6,10 +6,11 @@ import { followInternalLink, isModifiedClick } from "../router.js";
  * so a future inline editor can target, edit and save one block at a time.
  *
  *   { type: "paragraph", text }
- *   { type: "heading", level: 2 | 3, text }
- *   { type: "list", ordered?: boolean, items: string[] }
+ *   { type: "heading", level: 2 | 3 | 4, text }
+ *   { type: "list", ordered?: boolean, items: (string | { text, list })[] }   (lists nest)
  *   { type: "quote", text }
  *   { type: "code", language?: string, text }        (shown as-is, never formatted)
+ *   { type: "divider" }                              (a horizontal rule)
  *   { type: "details", summary, blocks: [...] }      (expandable section)
  *
  * Inline formatting inside text: **bold**, *italic*, `code`, [label](url).
@@ -64,6 +65,27 @@ export function Inline({ text }) {
   return <InlineNodes nodes={parseInline(text)} />;
 }
 
+/** A list; an item is text, or text with a nested list ({ text, list }). */
+function ListBlock({ items, ordered }) {
+  const List = ordered ? "ol" : "ul";
+  return (
+    <List>
+      {(items ?? []).map((item, index) =>
+        typeof item === "string" ? (
+          <li key={index}>
+            <Inline text={item} />
+          </li>
+        ) : (
+          <li key={index}>
+            <Inline text={item?.text} />
+            {item?.list && <ListBlock items={item.list.items} ordered={item.list.ordered} />}
+          </li>
+        ),
+      )}
+    </List>
+  );
+}
+
 function Block({ block }) {
   switch (block.type) {
     case "paragraph":
@@ -74,29 +96,20 @@ function Block({ block }) {
       );
 
     // The panel title is an h2, so content headings start at h3.
-    case "heading":
-      return block.level === 3 ? (
-        <h4>
-          <Inline text={block.text} />
-        </h4>
-      ) : (
-        <h3>
-          <Inline text={block.text} />
-        </h3>
-      );
-
-    case "list": {
-      const List = block.ordered ? "ol" : "ul";
+    case "heading": {
+      const Heading = block.level === 4 ? "h5" : block.level === 3 ? "h4" : "h3";
       return (
-        <List>
-          {(block.items ?? []).map((item, index) => (
-            <li key={index}>
-              <Inline text={item} />
-            </li>
-          ))}
-        </List>
+        <Heading>
+          <Inline text={block.text} />
+        </Heading>
       );
     }
+
+    case "list":
+      return <ListBlock items={block.items} ordered={block.ordered} />;
+
+    case "divider":
+      return <hr />;
 
     case "quote":
       return (

@@ -506,23 +506,19 @@
 
 .editor-input:focus,
 .editor-select:focus,
-.editor-inplace:focus,
-.block-input:focus,
-.block-editor__kind:focus {
+.editor-inplace:focus {
   border-color: rgba(35, 50, 48, 0.32);
   box-shadow: 0 0 0 3px rgba(139, 164, 161, 0.5);
 }
 
 .editor-input[aria-invalid="true"],
 .editor-select[aria-invalid="true"],
-.editor-inplace[aria-invalid="true"],
-.block-input[aria-invalid="true"] {
+.editor-inplace[aria-invalid="true"] {
   border-color: var(--error);
 }
 
 .editor-input::placeholder,
-.editor-inplace::placeholder,
-.block-input::placeholder {
+.editor-inplace::placeholder {
   color: var(--muted-ink);
   opacity: 0.75;
 }
@@ -572,8 +568,7 @@
  * outline that says "editable". The negative margin keeps the text exactly
  * where the reading view puts it.
  */
-.editor-inplace,
-.block-input {
+.editor-inplace {
   display: block;
   width: calc(100% + 18px);
   margin: -5px -9px;
@@ -587,13 +582,11 @@
   outline: none;
 }
 
-.editor-inplace:hover,
-.block-input:hover {
+.editor-inplace:hover {
   border-color: rgba(35, 50, 48, 0.42);
 }
 
-.editor-inplace:focus,
-.block-input:focus {
+.editor-inplace:focus {
   border-style: solid;
   background: rgba(231, 226, 220, 0.7);
 }
@@ -709,76 +702,431 @@
   font-weight: 700;
 }
 
-/* ---------- Blocks (typography of .rich-text) ---------- */
+/* ---------- Document editor (one continuous page, reading-view typography) ---------- */
 
-.editor-blocks {
-  color: var(--ink);
-  font-size: 1.075rem;
-  line-height: 1.8;
+/* Kept mounted (hidden) while the preview shows. */
+.editor[hidden] {
+  display: none;
 }
 
-.editor-blocks:lang(ar) {
-  font-size: 1.12rem;
-  line-height: 1.95;
+.button svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
 }
 
-.block-list {
-  display: grid;
-  gap: 18px;
+.editor-section--document {
+  border-top: 0;
+  padding-top: 0;
 }
 
-.block-list__empty {
-  margin: 0;
+.doc-editor {
+  position: relative;
 }
 
-.block-editor {
-  min-width: 0;
-}
-
-.block-editor__controls {
+/* The toolbar stays at the top of the panel while writing long texts. */
+.doc-toolbar {
+  position: sticky;
+  z-index: 3;
+  top: calc(-1 * clamp(12px, 2.4vw, 30px));
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
+  gap: 6px 10px;
   align-items: center;
-  margin-bottom: 9px;
-  font-size: 0.8rem;
-  line-height: 1.2;
-  opacity: 0.62;
+  margin: 0 -9px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(231, 226, 220, 0.97);
+  padding: 6px 8px;
+  box-shadow: 0 8px 22px rgba(35, 50, 48, 0.08);
 }
 
-.block-editor:hover > .block-editor__controls,
-.block-editor:focus-within > .block-editor__controls,
-.block-editor[data-invalid="true"] > .block-editor__controls {
-  opacity: 1;
+.doc-toolbar__group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  align-items: center;
 }
 
-@media (hover: none) {
-  .block-editor__controls {
-    opacity: 1;
-  }
+.doc-toolbar__group + .doc-toolbar__group {
+  border-inline-start: 1px solid var(--border-subtle);
+  padding-inline-start: 8px;
 }
 
-.block-editor__spacer {
-  flex: 1;
+.doc-tool {
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  padding: 0;
+  color: var(--ink);
+  cursor: pointer;
 }
 
-.block-editor__kind {
-  min-height: 28px;
+.doc-tool svg {
+  width: 18px;
+  height: 18px;
+}
+
+.doc-tool:hover {
+  border-color: var(--border);
+  background: rgba(222, 226, 225, 0.94);
+}
+
+.doc-tool:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.doc-tool[aria-pressed="true"] {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--linen);
+}
+
+.doc-tool[aria-disabled="true"] {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.doc-style {
+  min-height: 32px;
   border: 1px solid var(--border);
   border-radius: 6px;
   background-color: rgba(231, 226, 220, 0.78);
-  padding: 3px 8px;
+  padding: 4px 8px;
   color: var(--ink);
   cursor: pointer;
   font: inherit;
+  font-size: 0.85rem;
   font-weight: 760;
-  outline: none;
 }
 
-.block-editor__kind:disabled {
-  cursor: default;
-  opacity: 0.8;
+.doc-language {
+  width: 110px;
+  min-height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: rgba(231, 226, 220, 0.78);
+  padding: 4px 8px;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
 }
+
+.doc-link {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 8px;
+}
+
+.doc-link__input {
+  flex: 1 1 220px;
+  min-width: 0;
+  min-height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.5);
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 0.9rem;
+}
+
+.doc-link__error {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.doc-problems {
+  margin: 0 0 12px;
+}
+
+/* The page: the reading view's text (.rich-text) on a quiet sheet. */
+.doc-page {
+  min-height: 55vh;
+  margin: 0 -9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.32);
+  padding: 22px 24px 32px;
+  outline: none;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+  caret-color: var(--ink);
+}
+
+.editor-document--notes .doc-page {
+  min-height: 8rem;
+}
+
+.doc-page:focus {
+  border-color: rgba(35, 50, 48, 0.32);
+  box-shadow: 0 0 0 3px rgba(139, 164, 161, 0.35);
+}
+
+.doc-page p.is-empty::before,
+.doc-page h3.is-empty::before,
+.doc-page h4.is-empty::before,
+.doc-page h5.is-empty::before,
+.doc-page .doc-details__summary.is-empty::before {
+  content: attr(data-placeholder);
+  float: inline-start;
+  height: 0;
+  color: var(--muted-ink);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.doc-page a {
+  cursor: text;
+}
+
+.doc-page pre {
+  white-space: pre;
+}
+
+.doc-page hr {
+  cursor: pointer;
+}
+
+.doc-page hr.ProseMirror-selectednode,
+.doc-page .doc-raw.ProseMirror-selectednode {
+  outline: 2px solid rgba(139, 164, 161, 0.8);
+  outline-offset: 4px;
+}
+
+/* Expandable section, open while editing (same frame as .rich-details). */
+.doc-details {
+  margin: 1.4em 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(231, 226, 220, 0.6);
+}
+
+.doc-details__summary {
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 12px 18px 12px 34px;
+  font-weight: 780;
+  line-height: 1.5;
+  position: relative;
+}
+
+.doc-details__summary::after {
+  content: "▾";
+  position: absolute;
+  inset-inline-start: 14px;
+  top: 12px;
+  color: var(--rose);
+}
+
+[dir="rtl"] .doc-details__summary {
+  padding: 12px 34px 12px 18px;
+}
+
+.doc-details__content {
+  padding: 14px 18px 4px;
+}
+
+.doc-raw {
+  margin: 1em 0;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  color: var(--muted-ink);
+  font-size: 0.9rem;
+}
+
+.ProseMirror-gapcursor::after {
+  border-top-color: var(--ink);
+}
+
+/* ---------- Video and PDF sections ---------- */
+
+.editor-inline-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.editor-inline-row .editor-input {
+  flex: 1 1 260px;
+  width: auto;
+}
+
+.editor-textarea {
+  display: block;
+  resize: none;
+  overflow: hidden;
+  font-weight: 450;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.video-card {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 12px;
+}
+
+.video-card__image {
+  flex: none;
+  width: 160px;
+  aspect-ratio: 16 / 9;
+  border-radius: 6px;
+  object-fit: cover;
+  background: var(--ink);
+}
+
+.video-card__text {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  font-size: 0.92rem;
+}
+
+.video-card__text strong {
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.video-card__text a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.video-card__source,
+.video-card__note {
+  color: var(--muted-ink);
+  font-size: 0.84rem;
+  font-weight: 650;
+}
+
+.video-review__list {
+  display: grid;
+  gap: 10px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.video-review__list label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  cursor: pointer;
+}
+
+.video-review__list input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--ink);
+}
+
+.video-review__values {
+  display: grid;
+  gap: 2px;
+  margin: 4px 0 0 26px;
+  color: var(--muted-ink);
+  font-size: 0.86rem;
+  overflow-wrap: anywhere;
+}
+
+.upload-drop {
+  display: grid;
+  gap: 10px;
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: rgba(231, 226, 220, 0.45);
+  padding: 16px 18px;
+}
+
+.upload-drop--active {
+  border-color: var(--ink);
+  background: rgba(139, 164, 161, 0.2);
+}
+
+.upload-drop__current {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: baseline;
+  margin: 0;
+  font-weight: 750;
+}
+
+.upload-drop__name {
+  overflow-wrap: anywhere;
+}
+
+.upload-drop__current a {
+  color: var(--muted-ink);
+  font-size: 0.88rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.upload-drop__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  color: var(--muted-ink);
+  font-size: 0.88rem;
+  font-weight: 650;
+}
+
+.upload-progress p {
+  margin: 0;
+}
+
+.upload-progress__bar {
+  height: 8px;
+  margin: 10px 0 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(35, 50, 48, 0.1);
+}
+
+.upload-progress__bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ink);
+}
+
+.upload-progress__numbers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  align-items: center;
+  color: var(--muted-ink);
+  font-size: 0.86rem;
+  font-weight: 650;
+}
+
+.editor-advanced summary {
+  cursor: pointer;
+  color: var(--muted-ink);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.editor-advanced[open] summary {
+  margin-bottom: 10px;
+}
+
+/* ---------- Small square buttons (↑ ↓ ✕ in the links editor) ---------- */
 
 .icon-button {
   display: inline-grid;
@@ -812,172 +1160,8 @@
   opacity: 0.4;
 }
 
-.icon-button--bold {
-  font-weight: 900;
-}
-
-.icon-button--italic {
-  font-family: Georgia, "Times New Roman", serif;
-  font-style: italic;
-  font-weight: 700;
-}
-
-.icon-button--code {
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-}
-
 .icon-button--danger {
   color: var(--error);
-}
-
-.block-input--paragraph {
-  font-size: inherit;
-  line-height: inherit;
-}
-
-.block-input--h3 {
-  font-size: 1.45rem;
-  font-weight: 800;
-  line-height: 1.25;
-}
-
-.block-input--h4 {
-  font-size: 1.2rem;
-  font-weight: 800;
-  line-height: 1.3;
-}
-
-/* Lists: one field per item, with the reading view's rose markers. */
-.block-list-items {
-  display: grid;
-  gap: 14px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  counter-reset: editor-item;
-}
-
-.block-list-items > li {
-  display: grid;
-  grid-template-columns: 2em minmax(0, 1fr);
-  align-items: start;
-  counter-increment: editor-item;
-}
-
-.block-list-items > li::before {
-  padding-inline-end: 0.75em;
-  color: var(--rose);
-  font-weight: 800;
-  text-align: end;
-}
-
-.block-list-items--bulleted > li::before {
-  content: "•";
-}
-
-.block-list-items--numbered > li::before {
-  content: counter(editor-item) ".";
-}
-
-/* Arabic numbered lists use Arabic-Indic digits, as in the reading view. */
-.editor:lang(ar) .block-list-items--numbered > li::before {
-  content: counter(editor-item, arabic-indic) ".";
-}
-
-.block-input--item {
-  font-size: inherit;
-  line-height: inherit;
-}
-
-.block-quote {
-  border-inline-start: 5px solid var(--rose);
-  padding-block: 2px;
-  padding-inline-start: 20px;
-}
-
-.block-input--quote {
-  font-size: 1.12rem;
-  font-weight: 650;
-  line-height: 1.65;
-}
-
-.block-code {
-  display: grid;
-  gap: 8px;
-}
-
-.block-code__language.editor-input {
-  width: min(100%, 220px);
-  min-height: 32px;
-  padding: 5px 10px;
-  font-family: var(--font-mono);
-  font-size: 0.82rem;
-}
-
-.block-input--code {
-  width: 100%;
-  margin: 0;
-  overflow-x: auto;
-  border-style: solid;
-  border-color: var(--border);
-  background: rgba(35, 50, 48, 0.06);
-  padding: 14px 16px;
-  font-family: var(--font-mono);
-  font-size: 0.88rem;
-  line-height: 1.65;
-  tab-size: 2;
-  white-space: pre;
-}
-
-/* Expandable section: same frame as .rich-details. */
-.block-details {
-  display: grid;
-  gap: 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: rgba(231, 226, 220, 0.6);
-  padding: 14px 18px 16px;
-}
-
-.block-input--summary {
-  font-weight: 780;
-  line-height: 1.5;
-}
-
-.block-details .block-list {
-  border-top: 1px solid var(--border-subtle);
-  padding-top: 14px;
-}
-
-.block-editor[data-invalid="true"] .block-details {
-  border-color: rgba(143, 59, 44, 0.45);
-}
-
-.block-undo {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  margin: 0;
-  color: var(--muted-ink);
-  font-size: 0.88rem;
-  font-weight: 700;
-}
-
-.block-add {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 8px;
-  align-items: center;
-  border: 1px dashed var(--border);
-  border-radius: var(--radius);
-  padding: 10px 12px;
-  line-height: 1.2;
-}
-
-.block-add .editor-label {
-  margin: 0;
-  margin-inline-end: 4px;
 }
 
 /* ---------- Links editor ---------- */
@@ -1029,6 +1213,14 @@
   .admin-bar__long {
     display: none;
   }
+
+  /* Editor with Save draft and Publish: Write | Preview on the first row,
+     the three actions together on the second (not one left over). */
+  .admin-tools--stacked .admin-tools__spacer {
+    flex-basis: 100%;
+    height: 0;
+    margin-block: -3px;
+  }
 }
 
 @media (max-width: 760px) {
@@ -1055,14 +1247,17 @@
     min-width: 0;
   }
 
-  .editor-blocks {
-    font-size: 1.03rem;
-    line-height: 1.75;
+  .doc-page {
+    min-height: 45vh;
+    padding: 16px 14px 24px;
   }
 
-  .editor-blocks:lang(ar) {
-    font-size: 1.08rem;
-    line-height: 1.9;
+  .doc-toolbar {
+    top: -8px;
+  }
+
+  .video-card__image {
+    width: 112px;
   }
 
   .links-editor__row {
@@ -1078,10 +1273,5 @@
     grid-column: 2;
     grid-row: 1 / span 2;
     flex-direction: column;
-  }
-
-  .block-input--code {
-    padding: 12px;
-    font-size: 0.82rem;
   }
 }

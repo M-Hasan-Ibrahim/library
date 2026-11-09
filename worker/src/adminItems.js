@@ -18,6 +18,8 @@
  * .bind(), never concatenated.
  */
 import { toItem } from "./content.js";
+import { attachStatements, filesBase, MISSING_UPLOAD } from "./files.js";
+import { HttpError } from "./httpError.js";
 import {
   applyFields,
   assertValidRow,
@@ -31,31 +33,26 @@ import {
   today,
 } from "./itemInput.js";
 
-/** An error with a ready HTTP status and JSON body. */
-export class HttpError extends Error {
-  constructor(status, body) {
-    super(body?.error ?? `HTTP ${status}`);
-    this.name = "HttpError";
-    this.status = status;
-    this.body = body;
-  }
-}
+export { HttpError };
 
 const COLUMNS = [
   "id", "slug", "type", "category_id", "language", "title", "description", "tags_json", "links_json",
   "added_at", "updated_at", "body_json", "reading_minutes", "file_url", "page_count", "video_url", "url",
+  "video_description", "media_json", // migration 0004
   "status", "revision",
 ];
-// Same snapshot shape as migration 0003's baseline rows.
+// Same snapshot shape as migration 0003's baseline rows (plus the 0004 columns).
 const SNAPSHOT = `json_object(${COLUMNS.map((c) => `'${c}', ${c}`).join(", ")})`;
 // Columns a content edit or a restore may change (never id, slug, type, status).
 const CONTENT_COLUMNS = [
   "category_id", "language", "title", "description", "tags_json", "links_json", "added_at", "updated_at",
-  "body_json", "reading_minutes", "file_url", "page_count", "video_url", "url",
+  "body_json", "reading_minutes", "file_url", "page_count", "video_url", "url", "video_description", "media_json",
 ];
+// The list leaves out the long text columns.
+const LIST_COLUMNS = COLUMNS.filter((c) => !["body_json", "video_description", "media_json"].includes(c));
 
 const SQL = {
-  list: `SELECT ${COLUMNS.filter((c) => c !== "body_json").join(", ")} FROM items ORDER BY added_at DESC, id`,
+  list: `SELECT ${LIST_COLUMNS.join(", ")} FROM items ORDER BY added_at DESC, id`,
   get: `SELECT ${COLUMNS.join(", ")} FROM items WHERE id = ?1`,
   categoryIds: "SELECT id FROM categories",
   languageCodes: "SELECT code FROM languages",
@@ -103,10 +100,28 @@ function parseBlocks(bodyJson) {
   }
 }
 
-/** Admin view of an item: the public shape plus status, revision and blocks. */
-export function toAdminItem(row) {
-  return { ...toItem(row), status: row.status, revision: row.revision, blocks: parseBlocks(row.body_json) };
+function parseVideoInfo(mediaJson) {
+  if (typeof mediaJson !== "string" || mediaJson === "") return null;
+  try {
+    const info = JSON.parse(mediaJson);
+    return info && typeof info === "object" && !Array.isArray(info) ? info : null;
+  } catch {
+    return null;
+  }
 }
+
+/**
+ * Admin view of an item: the public shape plus status, revision and blocks
+ * (and, for videos, the information last fetched from YouTube).
+ */
+export function toAdminItem(row) {
+  const item = { ...toItem(row), status: row.status, revision: row.revision, blocks: parseBlocks(row.body_json) };
+  if (row.type === "youtube") item.videoInfo = parseVideoInfo(row.media_json);
+  return item;
+}
+
+// This API's own upload address, when configured (see RULES.fileUrl).
+const inputOptions = (env) => (env?.PUBLIC_API_URL ? { ownFiles: filesBase(env) } : {});
 
 const rowValues = (row) => COLUMNS.map((c) => row[c] ?? null);
 const contentValues = (row) => CONTENT_COLUMNS.map((c) => row[c] ?? null);
@@ -160,6 +175,10 @@ async function translateDbError(db, error, id) {
   if (/FOREIGN KEY constraint failed/i.test(message)) {
     return new HttpError(422, { error: "The category or language no longer exists.", code: "validation" });
   }
+  // The upload was removed by the clean-up at the moment of saving (trigger files_removal_final).
+  if (/a removed file cannot be used again/i.test(message)) {
+    return new HttpError(422, { error: "Some fields are not valid", code: "validation", fields: { fileUrl: MISSING_UPLOAD } });
+  }
   return null;
 }
 
@@ -210,9 +229,9 @@ export async function getItem(db, id) {
   return { item: toAdminItem(await requireRow(db, id)) };
 }
 
-/** New items are always drafts at revision 1. */
-export async function createItem(db, input, email) {
-  const { type, slug: requestedSlug, fields } = parseCreateInput(input);
+/** New items are always drafts at revision 1. `env` locates uploaded files. */
+export async function createItem(db, input, email, env = {}) {
+  const { type, slug: requestedSlug, fields } = parseCreateInput(input, inputOptions(env));
   const context = await contentContext(db);
   const id = newItemId();
   const slug = await chooseSlug(db, requestedSlug, fields.title);
@@ -221,21 +240,24 @@ export async function createItem(db, input, email) {
   await runBatch(db, [
     db.prepare(SQL.insert).bind(...rowValues(row)),
     db.prepare(SQL.record).bind(id, 1, "create", email, ""),
+    ...(await attachStatements(db, row.file_url, env)),
   ], id);
   log("create", id, 1);
   return { item: toAdminItem(await requireRow(db, id)) };
 }
 
 /** Changes only the fields sent; everything else keeps its exact stored value. */
-export async function updateItem(db, id, input, email) {
+export async function updateItem(db, id, input, email, env = {}) {
   const current = await requireRow(db, id);
-  const { revision, fields } = parseUpdateInput(input, current.type);
+  const { revision, fields } = parseUpdateInput(input, current.type, inputOptions(env));
   assertRevision(current, revision);
   const next = { ...applyFields(current, fields, current.type), updated_at: today() };
   assertValidRow(next, await contentContext(db), toItem);
+  const attach = next.file_url !== current.file_url ? await attachStatements(db, next.file_url, env) : [];
   const [result] = await runBatch(db, [
     db.prepare(SQL.update).bind(id, revision, ...contentValues(next)),
     db.prepare(SQL.record).bind(id, revision + 1, "update", email, ""),
+    ...attach,
   ], id);
   if (!result.meta?.changes) throw await conflict(db, id);
   log("update", id, revision + 1);
@@ -303,7 +325,7 @@ export async function itemRevision(db, id, revision) {
  *  - Existing item: content columns from the snapshot; status unchanged.
  *  - Deleted item: the row comes back as a DRAFT (never silently re-published).
  */
-export async function restoreItem(db, id, input, email) {
+export async function restoreItem(db, id, input, email, env = {}) {
   const { revision, fromRevision } = parseRevisionInput(input, { withFrom: true });
   const source = await db.prepare(SQL.snapshot).bind(id, fromRevision).first();
   if (!source) throw new HttpError(404, { error: "Revision not found", code: "not_found" });
@@ -318,9 +340,11 @@ export async function restoreItem(db, id, input, email) {
     const next = { ...current, updated_at: today() };
     for (const column of CONTENT_COLUMNS) if (column !== "updated_at") next[column] = snapshot[column] ?? null;
     assertValidRow(next, context, toItem);
+    const attach = next.file_url !== current.file_url ? await attachStatements(db, next.file_url, env) : [];
     const [result] = await runBatch(db, [
       db.prepare(SQL.update).bind(id, revision, ...contentValues(next)),
       db.prepare(SQL.record).bind(id, revision + 1, "restore", email, note),
+      ...attach,
     ], id);
     if (!result.meta?.changes) throw await conflict(db, id);
     log("restore", id, revision + 1);
@@ -337,6 +361,7 @@ export async function restoreItem(db, id, input, email) {
   await runBatch(db, [
     db.prepare(SQL.insert).bind(...rowValues(row)),
     db.prepare(SQL.record).bind(id, row.revision, "restore", email, `${note} after deletion`),
+    ...(await attachStatements(db, row.file_url, env)),
   ], id);
   log("restore", id, row.revision);
   return { item: toAdminItem(await requireRow(db, id)) };

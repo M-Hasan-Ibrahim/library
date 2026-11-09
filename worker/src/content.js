@@ -28,9 +28,11 @@ export const ITEMS_SQL =
   "added_at, updated_at, reading_minutes, file_url, page_count, video_url, url " +
   "FROM published_items ORDER BY added_at DESC, id";
 
+// One item also carries its text and, for videos, the original video
+// description (migration 0004); the list never does.
 export const ITEM_BY_SLUG_SQL =
   "SELECT id, slug, type, category_id, language, title, description, tags_json, links_json, " +
-  "added_at, updated_at, reading_minutes, file_url, page_count, video_url, url, body_json " +
+  "added_at, updated_at, reading_minutes, file_url, page_count, video_url, url, body_json, video_description " +
   "FROM published_items WHERE slug = ?1 LIMIT 1";
 
 function parseJson(text, fallback) {
@@ -79,6 +81,7 @@ export function toItem(row) {
   if (row.page_count !== null) item.pageCount = row.page_count;
   if (row.video_url !== null) item.videoUrl = row.video_url;
   if (row.url !== null) item.url = row.url;
+  if (typeof row.video_description === "string" && row.video_description !== "") item.videoDescription = row.video_description;
   return item;
 }
 

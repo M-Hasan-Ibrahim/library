@@ -180,7 +180,7 @@ describe("authentication and request guards", () => {
     const site = await call("/api/admin/items", { method: "OPTIONS", token: null });
     assert.equal(site.status, 204);
     assert.equal(site.headers.get("access-control-allow-methods"), "GET, HEAD, POST, PATCH, DELETE, OPTIONS");
-    assert.equal(site.headers.get("access-control-allow-headers"), "Content-Type");
+    assert.equal(site.headers.get("access-control-allow-headers"), "Content-Type, X-File-Name, Range"); // X-File-Name: PDF uploads; Range: reading admin files
     const evil = await call("/api/admin/items", { method: "OPTIONS", token: null, origin: "https://evil.example" });
     assert.equal(evil.headers.get("access-control-allow-origin"), null);
   });

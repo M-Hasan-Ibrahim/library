@@ -29,10 +29,21 @@
     // "Application Audience (AUD) Tag" of the Access application "Library Admin".
     "ACCESS_AUD": "bdcbdda7dec5598bc0ecabcfddf4bd0faaee8d563e2514932a9f65c3b0dacfc8",
     // Where /api/admin/login returns after sign-in (must be in ALLOWED_ORIGINS).
-    "SITE_URL": "https://library.mh-ibrahim.com/"
+    "SITE_URL": "https://library.mh-ibrahim.com/",
+    // This API's public address: uploaded files are served at <it>/files/<key>.
+    "PUBLIC_API_URL": "https://api.library.mh-ibrahim.com"
     // ADMIN_EMAIL is a Worker secret (kept out of this public repository):
     // it is uploaded with `npx wrangler@4 deploy --secrets-file <file>`.
+    // YOUTUBE_API_KEY (optional) is a Worker secret too: without it, video
+    // lookups fall back to YouTube's oEmbed (title and channel only).
   },
+  // Uploaded PDFs (Cloudflare R2). The bucket must exist before deploying.
+  // It stays private (no public access, no r2.dev address): the Worker serves
+  // a file at <PUBLIC_API_URL>/files/<key> only while a published item uses it.
+  "r2_buckets": [{ "binding": "FILES", "bucket_name": "library-files" }],
+  // Hourly at minute 23: removes uploads that nothing uses, a day after their
+  // upload (worker/src/files.js cleanupOrphans). Included in Workers Free.
+  "triggers": { "crons": ["23 * * * *"] },
   "d1_databases": [
     {
       "binding": "DB",

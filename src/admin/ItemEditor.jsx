@@ -1,21 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ItemView, { ITEM_TITLE_ID } from "../components/ItemView.jsx";
 import { plural } from "../lib/format.js";
-import { parseYouTubeUrl } from "../lib/youtube.js";
 import { closeItem } from "../router.js";
 import { shapeItem } from "../services/libraryRepository.js";
-import BlocksEditor from "./BlocksEditor.jsx";
-import { adminApi } from "./client.js";
+import { describeError } from "./api.js";
+import { adminApi, INPUT_OPTIONS } from "./client.js";
+import DocumentEditor from "./DocumentEditor.jsx";
 import {
   blockProblems,
   changedFields,
   checkForm,
-  collectBlockIds,
   createPayload,
   FIELD_LABELS,
   formBlockProblems,
   isDirty,
-  newBlockId,
   payloadFromForm,
   previewItem,
   sameJson,
@@ -24,17 +22,20 @@ import {
   typeLabel,
 } from "./editorModel.js";
 import LinksEditor from "./LinksEditor.jsx";
+import PdfUploadSection from "./PdfUploadSection.jsx";
 import { AutoTextarea, ConfirmBox, ErrorNotice, PanelTools } from "./ui.jsx";
 import { clearUnsaved, saveUnsaved } from "./unsaved.js";
+import YouTubeSection from "./YouTubeSection.jsx";
 
 /**
  * The reading view turned into a form, for an existing item ("edit") or a
  * new one ("new", saved as a draft). Same container, same typography: the
- * title, description and text are edited where they are read.
+ * title and description are edited where they are read, and the text is one
+ * continuous document (DocumentEditor) styled like the reading view.
  *
  *  - Save sends only the fields that changed, with the revision the edit is
  *    based on (409 if the item changed elsewhere: the admin chooses to save
- *    over the latest version or to discard).
+ *    over the latest version or to discard). "Publish" saves, then publishes.
  *  - Problems are reported before sending, with the server's own rules;
  *    a 422 from the server is shown the same way.
  *  - Unsaved changes are kept in this tab (unsaved.js), closing the panel
@@ -51,6 +52,7 @@ const FIELD_IDS = {
   fileUrl: "editor-file",
   pageCount: "editor-pages",
   videoUrl: "editor-video",
+  videoDescription: "editor-video-description",
   url: "editor-url",
   links: "editor-links",
 };
@@ -68,6 +70,8 @@ function FieldError({ id, field, message }) {
 
 /** Field value used to tell whether a server error still applies. */
 const fieldValue = (form, field) => (field === "slug" ? form.slug.trim() : payloadFromForm(form)[field]);
+
+const NOTES_LABEL = { youtube: "Your notes on the video", pdf: "Your notes on the document", link: "Your notes on the page" };
 
 export default function ItemEditor({
   kind,
@@ -95,33 +99,33 @@ export default function ItemEditor({
   const [confirm, setConfirm] = useState(null); // "cancel" | "close" | null
   const [showRestored, setShowRestored] = useState(restored);
   const [summaryFocus, setSummaryFocus] = useState(0);
+  const [languageTouched, setLanguageTouched] = useState(false);
   const summaryRef = useRef(null);
+  const docRef = useRef(null);
   const formRef = useRef(form);
   formRef.current = form;
   const finishedRef = useRef(false);
-  const issuedIds = useRef(new Set());
 
   const dirty = useMemo(() => isDirty(form, baseForm), [form, baseForm]);
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
 
   const update = useCallback((changes) => setForm((previous) => ({ ...previous, ...changes })), []);
-  const makeId = useCallback(() => {
-    const used = collectBlockIds(formRef.current.blocks);
-    let id;
-    do id = newBlockId(formRef.current.blocks);
-    while (issuedIds.current.has(id) || used.has(id));
-    issuedIds.current.add(id);
-    return id;
-  }, []);
+  const onForm = useCallback((change) => setForm((previous) => change(previous)), []);
 
   const language = meta.languages.find((entry) => entry.code === form.language);
   const dir = language?.dir ?? "ltr";
 
+  /** The form with the document editor's latest text. */
+  const currentForm = () => {
+    const blocks = docRef.current?.flush();
+    return blocks && !sameJson(blocks, formRef.current.blocks) ? { ...formRef.current, blocks } : formRef.current;
+  };
+
   /* ---------------------------------------------------------- problems */
 
   // After the first save attempt, problems update live as the admin fixes them.
-  const clientErrors = attempted ? checkForm(form) : null;
+  const clientErrors = attempted ? checkForm(form, INPUT_OPTIONS) : null;
   // A server error stays until its field is edited; errors about something
   // the form cannot change ("item", "body") stay until the next save.
   let liveServerErrors = null;
@@ -159,12 +163,13 @@ export default function ItemEditor({
   const focusField = (field) => {
     setView("write");
     requestAnimationFrame(() => {
-      const target =
-        field === "blocks"
-          ? document.querySelector('.block-editor[data-invalid="true"] textarea, .block-editor[data-invalid="true"] input, .block-add button')
-          : field === "links"
-            ? document.querySelector(".links-editor input, .links-editor button")
-            : document.getElementById(FIELD_IDS[field]);
+      if (field === "blocks") {
+        docRef.current?.focus();
+        return;
+      }
+      const target = field === "links" ? document.querySelector(".links-editor input, .links-editor button") : document.getElementById(FIELD_IDS[field]);
+      const folded = target?.closest("details");
+      if (folded && !folded.open) folded.open = true; // e.g. "Use a file address instead"
       target?.focus();
     });
   };
@@ -233,36 +238,53 @@ export default function ItemEditor({
     }
   }
 
-  const save = async () => {
+  /** Publishes a saved item; a failure leaves it saved as a draft and says so. */
+  async function publishSaved(saved) {
+    try {
+      const data = await adminApi.publishItem(saved.id, saved.revision);
+      return { item: data.item };
+    } catch (error) {
+      return { item: saved, notice: `Saved as a draft, but it could not be published: ${describeError(error)} Use Publish to try again.` };
+    }
+  }
+
+  const save = async ({ publish = false } = {}) => {
     if (saving) return;
-    const snapshot = form;
+    const snapshot = currentForm();
+    if (snapshot !== formRef.current) setForm(snapshot);
     setFailure(null);
     setConflict(null);
     setConfirm(null);
     setServerErrors(null);
     setAttempted(true);
-    if (checkForm(snapshot)) {
+    if (checkForm(snapshot, INPUT_OPTIONS)) {
       setView("write");
       setSummaryFocus((n) => n + 1);
       return;
     }
     let request;
     if (kind === "new") {
-      request = () => adminApi.createItem(createPayload(snapshot));
+      request = () => adminApi.createItem(createPayload(snapshot)).then((data) => data.item);
     } else {
       const changes = changedFields(snapshot, baseForm);
       if (Object.keys(changes).length === 0) {
-        finish();
-        onCancel();
-        return;
+        if (!publish) {
+          finish();
+          onCancel();
+          return;
+        }
+        request = async () => item;
+      } else {
+        request = () => adminApi.updateItem(item.id, { revision: baseRevision, ...changes }).then((data) => data.item);
       }
-      request = () => adminApi.updateItem(item.id, { revision: baseRevision, ...changes });
     }
     setSaving(true);
     try {
-      const data = await request();
+      let saved = await request();
+      let notice;
+      if (publish && saved.status !== "published") ({ item: saved, notice } = await publishSaved(saved));
       finish();
-      onSaved(data.item);
+      onSaved(saved, { notice, published: publish && saved.status === "published" });
     } catch (error) {
       handleError(error, snapshot);
     } finally {
@@ -286,7 +308,7 @@ export default function ItemEditor({
 
   // 409: apply this edit's changes on top of the version saved elsewhere.
   const saveOverLatest = async () => {
-    const snapshot = form;
+    const snapshot = currentForm();
     setSaving(true);
     setFailure(null);
     try {
@@ -318,7 +340,7 @@ export default function ItemEditor({
 
   const cancel = () => {
     if (saving) return;
-    if (dirty) setConfirm("cancel");
+    if (isDirty(currentForm(), baseForm)) setConfirm("cancel");
     else {
       finish();
       onCancel();
@@ -341,22 +363,31 @@ export default function ItemEditor({
     else onCancel();
   };
 
+  const showView = (next) => {
+    if (next === "preview") {
+      const latest = currentForm();
+      if (latest !== formRef.current) setForm(latest);
+    }
+    setView(next);
+  };
+
   /* ---------------------------------------------------------- view */
 
   const published = kind === "edit" && item?.status === "published";
+  const canPublish = kind === "new" || item?.status === "draft";
   const entries = errors ? Object.entries(errors) : [];
   const invalidBlockCount = problems.byId.size;
-  const video = form.type === "youtube" ? parseYouTubeUrl(form.videoUrl.trim()) : null;
   const heading = kind === "new" ? `New ${typeLabel(form.type).toLowerCase()}` : `Editing “${item.title}”`;
+  const isArticle = form.type === "article";
 
   return (
     <>
-      <PanelTools label="Editor" target={toolsElement}>
+      <PanelTools className={canPublish ? "admin-tools--stacked" : ""} label="Editor" target={toolsElement}>
         <span aria-label="Show" className="admin-segmented" lang="en" role="group">
-          <button aria-pressed={view === "write"} onClick={() => setView("write")} type="button">
+          <button aria-pressed={view === "write"} onClick={() => showView("write")} type="button">
             Write
           </button>
-          <button aria-pressed={view === "preview"} onClick={() => setView("preview")} type="button">
+          <button aria-pressed={view === "preview"} onClick={() => showView("preview")} type="button">
             Preview
           </button>
         </span>
@@ -365,9 +396,14 @@ export default function ItemEditor({
         <button aria-disabled={saving || undefined} className="button button--small" onClick={cancel} type="button">
           Cancel
         </button>
-        <button aria-disabled={saving || undefined} className="button button--small button--primary" onClick={save} type="button">
-          {saving ? "Saving…" : kind === "new" ? "Save draft" : "Save"}
+        <button aria-disabled={saving || undefined} className={`button button--small${canPublish ? "" : " button--primary"}`} onClick={() => save()} type="button">
+          {saving ? "Saving…" : canPublish ? "Save draft" : "Save"}
         </button>
+        {canPublish && (
+          <button aria-disabled={saving || undefined} className="button button--small button--primary" onClick={() => save({ publish: true })} type="button">
+            Publish
+          </button>
+        )}
       </PanelTools>
 
       <div className="admin-panel-messages" lang="en">
@@ -388,7 +424,9 @@ export default function ItemEditor({
           <p className="admin-notice admin-notice--quiet">This item is published: saving updates what visitors see right away.</p>
         )}
         {kind === "new" && (
-          <p className="admin-notice admin-notice--quiet">New items are saved as drafts. Only you see a draft until you publish it.</p>
+          <p className="admin-notice admin-notice--quiet">
+            “Save draft” keeps it visible only to you; “Publish” saves it and shows it to visitors.
+          </p>
         )}
         {confirm && (
           <ConfirmBox
@@ -420,7 +458,7 @@ export default function ItemEditor({
             </div>
           </div>
         )}
-        <ErrorNotice error={failure} keepsChanges onRetry={save} retryLabel="Try saving again" />
+        <ErrorNotice error={failure} keepsChanges onRetry={() => save()} retryLabel="Try saving again" />
         {errors && (
           <div className="admin-notice admin-notice--error editor-summary" ref={summaryRef} role="alert" tabIndex={-1}>
             <p>
@@ -432,9 +470,7 @@ export default function ItemEditor({
                   <button className="editor-summary__link" onClick={() => focusField(field)} type="button">
                     {FIELD_LABELS[field] ?? field}
                   </button>{" "}
-                  {field === "blocks" && invalidBlockCount > 0
-                    ? `has problems in ${plural(invalidBlockCount, "block")} (marked below).`
-                    : message}
+                  {field === "blocks" && invalidBlockCount > 0 ? `has problems in ${plural(invalidBlockCount, "block")} (marked below).` : message}
                 </li>
               ))}
             </ul>
@@ -442,7 +478,7 @@ export default function ItemEditor({
         )}
       </div>
 
-      {view === "preview" ? (
+      {view === "preview" && (
         <div className="editor-preview">
           {/* The reading view below carries the panel's title id. */}
           <p className="editor-preview__note" lang="en">
@@ -450,290 +486,247 @@ export default function ItemEditor({
           </p>
           <ItemView item={shapeItem(previewItem(form, item), meta)} />
         </div>
-      ) : (
-        <form
-          className="reader editor"
-          dir={dir}
-          lang={form.language}
-          noValidate
-          onSubmit={(event) => {
-            event.preventDefault();
-            save();
-          }}
-        >
-          <h2 className="visually-hidden" id={ITEM_TITLE_ID}>
-            {heading}
-          </h2>
+      )}
 
-          <header className="reader__header">
-            <div className="editor-meta" lang="en">
-              <div className="editor-field editor-field--inline">
-                <span className="editor-label">Type</span>
-                <span className="editor-type">
-                  {typeLabel(form.type)}
-                  {onChangeType && !dirty && (
-                    <button className="editor-type__change" onClick={onChangeType} type="button">
-                      Change
-                    </button>
-                  )}
-                </span>
-              </div>
-              <div className="editor-field editor-field--inline">
-                <label className="editor-label" htmlFor={FIELD_IDS.categoryId}>
-                  Category
-                </label>
-                <select
-                  aria-invalid={Boolean(errors?.categoryId) || undefined}
-                  className="editor-select"
-                  id={FIELD_IDS.categoryId}
-                  onChange={(event) => update({ categoryId: event.target.value })}
-                  value={form.categoryId}
-                >
-                  {meta.categories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="editor-field editor-field--inline">
-                <label className="editor-label" htmlFor={FIELD_IDS.language}>
-                  Language
-                </label>
-                <select
-                  className="editor-select"
-                  id={FIELD_IDS.language}
-                  onChange={(event) => update({ language: event.target.value })}
-                  value={form.language}
-                >
-                  {meta.languages.map((entry) => (
-                    <option key={entry.code} value={entry.code}>
-                      {entry.name === entry.nativeName ? entry.name : `${entry.name} (${entry.nativeName})`}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="editor-field editor-field--inline">
-                <label className="editor-label" htmlFor={FIELD_IDS.addedAt}>
-                  Date
-                </label>
-                <input
-                  aria-invalid={Boolean(errors?.addedAt) || undefined}
-                  className="editor-input"
-                  id={FIELD_IDS.addedAt}
-                  onChange={(event) => update({ addedAt: event.target.value })}
-                  type="date"
-                  value={form.addedAt}
-                />
-              </div>
+      {/* Kept mounted while previewing, so the document keeps its undo history. */}
+      <form
+        className="reader editor"
+        dir={dir}
+        hidden={view === "preview"}
+        lang={form.language}
+        noValidate
+        onSubmit={(event) => {
+          event.preventDefault();
+          save();
+        }}
+      >
+        <h2 className="visually-hidden" id={view === "write" ? ITEM_TITLE_ID : undefined}>
+          {heading}
+        </h2>
+
+        <header className="reader__header">
+          <div className="editor-meta" lang="en">
+            <div className="editor-field editor-field--inline">
+              <span className="editor-label">Type</span>
+              <span className="editor-type">
+                {typeLabel(form.type)}
+                {onChangeType && !dirty && (
+                  <button className="editor-type__change" onClick={onChangeType} type="button">
+                    Change
+                  </button>
+                )}
+              </span>
             </div>
-            <FieldError field="categoryId" message={errors?.categoryId} />
-            <FieldError field="language" message={errors?.language} />
-            <FieldError field="addedAt" message={errors?.addedAt} />
-
-            <AutoTextarea
-              aria-describedby={describedBy(errors?.title && "editor-title-error")}
-              aria-invalid={Boolean(errors?.title) || undefined}
-              aria-label="Title"
-              className="editor-inplace editor-title"
-              id={FIELD_IDS.title}
-              onChange={(title) => update({ title })}
-              placeholder={dir === "rtl" ? "العنوان" : "Title"}
-              singleLine
-              value={form.title}
-            />
-            <FieldError field="title" id="editor-title-error" message={errors?.title} />
-
-            <div className="lede editor-lede">
-              <AutoTextarea
-                aria-describedby={describedBy(errors?.description && "editor-description-error")}
-                aria-invalid={Boolean(errors?.description) || undefined}
-                aria-label="Description, shown on the card"
-                className="editor-inplace editor-description"
-                id={FIELD_IDS.description}
-                onChange={(description) => update({ description })}
-                placeholder={dir === "rtl" ? "وصف قصير يظهر على البطاقة" : "A short description, shown on the card"}
-                singleLine
-                value={form.description}
-              />
+            <div className="editor-field editor-field--inline">
+              <label className="editor-label" htmlFor={FIELD_IDS.categoryId}>
+                Category
+              </label>
+              <select
+                aria-invalid={Boolean(errors?.categoryId) || undefined}
+                className="editor-select"
+                id={FIELD_IDS.categoryId}
+                onChange={(event) => update({ categoryId: event.target.value })}
+                value={form.categoryId}
+              >
+                {meta.categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
             </div>
-            <FieldError field="description" id="editor-description-error" message={errors?.description} />
-
-            <div className="editor-field">
-              <label className="editor-label" htmlFor={FIELD_IDS.tags} lang="en">
-                Tags
+            <div className="editor-field editor-field--inline">
+              <label className="editor-label" htmlFor={FIELD_IDS.language}>
+                Language
+              </label>
+              <select
+                className="editor-select"
+                id={FIELD_IDS.language}
+                onChange={(event) => {
+                  setLanguageTouched(true);
+                  update({ language: event.target.value });
+                }}
+                value={form.language}
+              >
+                {meta.languages.map((entry) => (
+                  <option key={entry.code} value={entry.code}>
+                    {entry.name === entry.nativeName ? entry.name : `${entry.name} (${entry.nativeName})`}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="editor-field editor-field--inline">
+              <label className="editor-label" htmlFor={FIELD_IDS.addedAt}>
+                Date
               </label>
               <input
-                aria-describedby="editor-tags-hint"
-                aria-invalid={Boolean(errors?.tags) || undefined}
+                aria-invalid={Boolean(errors?.addedAt) || undefined}
                 className="editor-input"
-                id={FIELD_IDS.tags}
-                onChange={(event) => update({ tags: event.target.value })}
-                placeholder={dir === "rtl" ? "مثال: فيزياء، ضوء" : "e.g. physics, light"}
-                value={form.tags}
+                id={FIELD_IDS.addedAt}
+                onChange={(event) => update({ addedAt: event.target.value })}
+                type="date"
+                value={form.addedAt}
               />
-              <p className="editor-hint" id="editor-tags-hint" lang="en">
-                Separate tags with commas. Search uses them.
-              </p>
-              <FieldError field="tags" message={errors?.tags} />
             </div>
+          </div>
+          <FieldError field="categoryId" message={errors?.categoryId} />
+          <FieldError field="language" message={errors?.language} />
+          <FieldError field="addedAt" message={errors?.addedAt} />
 
-            {kind === "edit" && (
-              <div className="editor-field" dir="ltr" lang="en">
-                <span className="editor-label">Item address</span>
-                <p className="editor-fixed">
-                  <code>#/?item={item.slug}</code>
-                  <span className="editor-hint">Fixed, so shared links keep working.</span>
-                </p>
-              </div>
-            )}
+          <AutoTextarea
+            aria-describedby={describedBy(errors?.title && "editor-title-error")}
+            aria-invalid={Boolean(errors?.title) || undefined}
+            aria-label="Title"
+            className="editor-inplace editor-title"
+            id={FIELD_IDS.title}
+            onChange={(title) => update({ title })}
+            placeholder={dir === "rtl" ? "العنوان" : "Title"}
+            singleLine
+            value={form.title}
+          />
+          <FieldError field="title" id="editor-title-error" message={errors?.title} />
 
-            {kind === "new" && (
-              <div className="editor-field" dir="ltr" lang="en">
-                <label className="editor-label" htmlFor={FIELD_IDS.slug}>
-                  Item address <span className="editor-optional">(optional)</span>
-                </label>
-                <div className="editor-prefixed">
-                  <span aria-hidden="true">#/?item=</span>
-                  <input
-                    aria-describedby="editor-slug-hint"
-                    aria-invalid={Boolean(errors?.slug) || undefined}
-                    className="editor-input"
-                    id={FIELD_IDS.slug}
-                    onChange={(event) => update({ slug: event.target.value })}
-                    placeholder={slugify(form.title) || "made from the title"}
-                    spellCheck={false}
-                    value={form.slug}
-                  />
-                </div>
-                <p className="editor-hint" id="editor-slug-hint">
-                  Lowercase words joined by hyphens. Shared links use it, so it cannot change later. Left empty, it is made
-                  from the title.
-                </p>
-                <FieldError field="slug" message={errors?.slug} />
-              </div>
-            )}
-          </header>
+          <div className="lede editor-lede">
+            <AutoTextarea
+              aria-describedby={describedBy(errors?.description && "editor-description-error")}
+              aria-invalid={Boolean(errors?.description) || undefined}
+              aria-label="Description, shown on the card"
+              className="editor-inplace editor-description"
+              id={FIELD_IDS.description}
+              onChange={(description) => update({ description })}
+              placeholder={dir === "rtl" ? "وصف قصير يظهر على البطاقة" : "A short description, shown on the card"}
+              singleLine
+              value={form.description}
+            />
+          </div>
+          <FieldError field="description" id="editor-description-error" message={errors?.description} />
 
-          {form.type === "pdf" && (
-            <div className="editor-section editor-fields" dir="ltr" lang="en">
-              <div className="editor-field">
-                <label className="editor-label" htmlFor={FIELD_IDS.fileUrl}>
-                  PDF file
-                </label>
-                <input
-                  aria-describedby="editor-file-hint"
-                  aria-invalid={Boolean(errors?.fileUrl) || undefined}
-                  className="editor-input"
-                  id={FIELD_IDS.fileUrl}
-                  onChange={(event) => update({ fileUrl: event.target.value })}
-                  placeholder="documents/name.pdf"
-                  spellCheck={false}
-                  value={form.fileUrl}
-                />
-                <p className="editor-hint" id="editor-file-hint">
-                  A file already on this site (documents/…) or an https:// link. Uploading files comes later.
-                </p>
-                <FieldError field="fileUrl" message={errors?.fileUrl} />
-              </div>
-              <div className="editor-field editor-field--short">
-                <label className="editor-label" htmlFor={FIELD_IDS.pageCount}>
-                  Pages <span className="editor-optional">(optional)</span>
-                </label>
-                <input
-                  aria-invalid={Boolean(errors?.pageCount) || undefined}
-                  className="editor-input"
-                  id={FIELD_IDS.pageCount}
-                  inputMode="numeric"
-                  onChange={(event) => update({ pageCount: event.target.value })}
-                  value={form.pageCount}
-                />
-                <FieldError field="pageCount" message={errors?.pageCount} />
-              </div>
-            </div>
-          )}
-
-          {form.type === "youtube" && (
-            <div className="editor-section editor-fields" dir="ltr" lang="en">
-              <div className="editor-field">
-                <label className="editor-label" htmlFor={FIELD_IDS.videoUrl}>
-                  YouTube video
-                </label>
-                <input
-                  aria-describedby="editor-video-hint"
-                  aria-invalid={Boolean(errors?.videoUrl) || undefined}
-                  className="editor-input"
-                  id={FIELD_IDS.videoUrl}
-                  inputMode="url"
-                  onChange={(event) => update({ videoUrl: event.target.value })}
-                  placeholder="https://www.youtube.com/watch?v=…"
-                  spellCheck={false}
-                  value={form.videoUrl}
-                />
-                <p className="editor-hint" id="editor-video-hint" role="status">
-                  {form.videoUrl.trim() === ""
-                    ? "A youtube.com or youtu.be link, or the video id."
-                    : video
-                      ? `Video found: ${video.isShort ? "a Short, " : ""}id ${video.id}${video.start ? `, starting at ${video.start}s` : ""}.`
-                      : "This is not a YouTube video link yet."}
-                </p>
-                <FieldError field="videoUrl" message={errors?.videoUrl} />
-              </div>
-            </div>
-          )}
-
-          {form.type === "link" && (
-            <div className="editor-section editor-fields" dir="ltr" lang="en">
-              <div className="editor-field">
-                <label className="editor-label" htmlFor={FIELD_IDS.url}>
-                  Link URL
-                </label>
-                <input
-                  aria-describedby="editor-url-hint"
-                  aria-invalid={Boolean(errors?.url) || undefined}
-                  className="editor-input"
-                  id={FIELD_IDS.url}
-                  inputMode="url"
-                  onChange={(event) => update({ url: event.target.value })}
-                  placeholder="https://…"
-                  spellCheck={false}
-                  value={form.url}
-                />
-                <p className="editor-hint" id="editor-url-hint">
-                  The page this item points to (http:// or https://).
-                </p>
-                <FieldError field="url" message={errors?.url} />
-              </div>
-            </div>
-          )}
-
-          <section aria-labelledby="editor-text-heading" className="editor-section">
-            <h3 className="editor-section__title" id="editor-text-heading" lang="en">
-              Text{form.type === "article" ? "" : <span className="editor-optional"> (optional)</span>}
-            </h3>
-            <p className="editor-hint" lang="en">
-              Format with the buttons, or type **bold**, *italic*, `code` and [label](https://…).
+          <div className="editor-field">
+            <label className="editor-label" htmlFor={FIELD_IDS.tags} lang="en">
+              Tags
+            </label>
+            <input
+              aria-describedby="editor-tags-hint"
+              aria-invalid={Boolean(errors?.tags) || undefined}
+              className="editor-input"
+              id={FIELD_IDS.tags}
+              onChange={(event) => update({ tags: event.target.value })}
+              placeholder={dir === "rtl" ? "مثال: فيزياء، ضوء" : "e.g. physics, light"}
+              value={form.tags}
+            />
+            <p className="editor-hint" id="editor-tags-hint" lang="en">
+              Separate tags with commas. Search uses them.
             </p>
-            {problems.general.length > 0 && (
-              <ul className="editor-error-list" lang="en">
-                {problems.general.map((problem) => (
-                  <li key={problem}>{problem}</li>
-                ))}
-              </ul>
-            )}
-            <div className="editor-blocks">
-              <BlocksEditor blocks={form.blocks} makeId={makeId} onChange={(blocks) => update({ blocks })} problems={problems.byId} />
-            </div>
-          </section>
+            <FieldError field="tags" message={errors?.tags} />
+          </div>
 
-          <section aria-labelledby="editor-links-heading" className="editor-section">
-            <h3 className="editor-section__title" id="editor-links-heading" lang="en">
-              Links <span className="editor-optional">(optional)</span>
-            </h3>
-            <LinksEditor error={errors?.links} id={FIELD_IDS.links} links={form.links} onChange={(links) => update({ links })} />
-          </section>
-        </form>
-      )}
+          {kind === "edit" && (
+            <div className="editor-field" dir="ltr" lang="en">
+              <span className="editor-label">Item address</span>
+              <p className="editor-fixed">
+                <code>#/?item={item.slug}</code>
+                <span className="editor-hint">Fixed, so shared links keep working.</span>
+              </p>
+            </div>
+          )}
+
+          {kind === "new" && (
+            <div className="editor-field" dir="ltr" lang="en">
+              <label className="editor-label" htmlFor={FIELD_IDS.slug}>
+                Item address <span className="editor-optional">(optional)</span>
+              </label>
+              <div className="editor-prefixed">
+                <span aria-hidden="true">#/?item=</span>
+                <input
+                  aria-describedby="editor-slug-hint"
+                  aria-invalid={Boolean(errors?.slug) || undefined}
+                  className="editor-input"
+                  id={FIELD_IDS.slug}
+                  onChange={(event) => update({ slug: event.target.value })}
+                  placeholder={slugify(form.title) || "made from the title"}
+                  spellCheck={false}
+                  value={form.slug}
+                />
+              </div>
+              <p className="editor-hint" id="editor-slug-hint">
+                Lowercase words joined by hyphens. Shared links use it, so it cannot change later. Left empty, it is made from the
+                title.
+              </p>
+              <FieldError field="slug" message={errors?.slug} />
+            </div>
+          )}
+        </header>
+
+        {form.type === "pdf" && <PdfUploadSection errors={errors} form={form} ids={FIELD_IDS} onForm={onForm} />}
+
+        {form.type === "youtube" && (
+          <YouTubeSection errors={errors} form={form} ids={FIELD_IDS} kind={kind} languageTouched={languageTouched} onForm={onForm} />
+        )}
+
+        {form.type === "link" && (
+          <div className="editor-section editor-fields" dir="ltr" lang="en">
+            <div className="editor-field">
+              <label className="editor-label" htmlFor={FIELD_IDS.url}>
+                Link URL
+              </label>
+              <input
+                aria-describedby="editor-url-hint"
+                aria-invalid={Boolean(errors?.url) || undefined}
+                className="editor-input"
+                id={FIELD_IDS.url}
+                inputMode="url"
+                onChange={(event) => update({ url: event.target.value })}
+                placeholder="https://…"
+                spellCheck={false}
+                value={form.url}
+              />
+              <p className="editor-hint" id="editor-url-hint">
+                The page this item points to (http:// or https://).
+              </p>
+              <FieldError field="url" message={errors?.url} />
+            </div>
+          </div>
+        )}
+
+        <section aria-labelledby="editor-text-heading" className={`editor-section${isArticle ? " editor-section--document" : ""}`}>
+          <h3 className="editor-section__title" id="editor-text-heading" lang="en">
+            {isArticle ? "Text" : NOTES_LABEL[form.type]}
+            {!isArticle && <span className="editor-optional"> (optional)</span>}
+          </h3>
+          {!isArticle && (
+            <p className="editor-hint" lang="en">
+              Your own thoughts, summary or explanation, shown under the {form.type === "youtube" ? "video" : form.type === "pdf" ? "document" : "link"}. Nothing
+              is shown if you leave it empty.
+            </p>
+          )}
+          {problems.general.length > 0 && (
+            <ul className="editor-error-list" lang="en">
+              {problems.general.map((problem) => (
+                <li key={problem}>{problem}</li>
+              ))}
+            </ul>
+          )}
+          <div className={`editor-document${isArticle ? "" : " editor-document--notes"}`}>
+            <DocumentEditor
+              controllerRef={docRef}
+              dir={dir}
+              initialBlocks={initialForm.blocks}
+              label={isArticle ? "Article text" : NOTES_LABEL[form.type]}
+              lang={form.language}
+              onChange={(blocks) => setForm((previous) => (sameJson(previous.blocks, blocks) ? previous : { ...previous, blocks }))}
+              placeholder={isArticle ? (dir === "rtl" ? "ابدأ الكتابة…" : "Start writing…") : dir === "rtl" ? "ملاحظاتك (اختياري)…" : "Write your notes (optional)…"}
+              problems={problems.byId}
+            />
+          </div>
+        </section>
+
+        <section aria-labelledby="editor-links-heading" className="editor-section">
+          <h3 className="editor-section__title" id="editor-links-heading" lang="en">
+            Links <span className="editor-optional">(optional)</span>
+          </h3>
+          <LinksEditor error={errors?.links} id={FIELD_IDS.links} links={form.links} onChange={(links) => update({ links })} />
+        </section>
+      </form>
     </>
   );
 }

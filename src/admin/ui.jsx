@@ -8,10 +8,10 @@ import { getLibrary } from "../services/libraryRepository.js";
 import { describeError } from "./api.js";
 
 /** Renders the admin toolbar into the reading panel's top bar. */
-export function PanelTools({ target, label = "Item tools", children }) {
+export function PanelTools({ target, label = "Item tools", className = "", children }) {
   if (!target) return null;
   return createPortal(
-    <div aria-label={label} className="admin-tools" role="group">
+    <div aria-label={label} className={`admin-tools${className ? ` ${className}` : ""}`} role="group">
       {children}
     </div>,
     target,
