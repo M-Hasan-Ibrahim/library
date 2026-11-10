@@ -3,7 +3,7 @@ import useAsync from "../hooks/useAsync.js";
 import useDocumentTitle from "../hooks/useDocumentTitle.js";
 import useLibraryVersion from "../hooks/useLibraryVersion.js";
 import { closeItem } from "../router.js";
-import { getItem } from "../services/libraryRepository.js";
+import { getItem, refreshLibrary } from "../services/libraryRepository.js";
 import ItemView, { ITEM_TITLE_ID } from "./ItemView.jsx";
 import { PanelScrollContext } from "./panelScrollContext.js";
 import { EmptyState, ErrorState, LoadingState } from "./StatusMessage.jsx";
@@ -127,7 +127,11 @@ export default function ItemPanel({ slug, panel = "", AdminContent = null }) {
               <>
                 {loading && <LoadingState label="Opening…" />}
                 {result.status === "error" && (
-                  <ErrorState message={result.error.message} title="This item could not be opened." />
+                  <ErrorState message="The library can't be reached right now. Please check your connection, then try again." title="This item could not be opened.">
+                    <button className="button" onClick={refreshLibrary} type="button">
+                      Retry
+                    </button>
+                  </ErrorState>
                 )}
                 {result.status === "success" && !item && (
                   <EmptyState title="This item is not in the library.">

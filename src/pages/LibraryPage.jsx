@@ -11,7 +11,7 @@ import useLibraryVersion from "../hooks/useLibraryVersion.js";
 import { plural } from "../lib/format.js";
 import { filterItems } from "../lib/search.js";
 import { updateParams } from "../router.js";
-import { getLibrary } from "../services/libraryRepository.js";
+import { getLibrary, refreshLibrary } from "../services/libraryRepository.js";
 
 /**
  * One unified collection: every content type, filtered by URL parameters.
@@ -36,7 +36,11 @@ export default function LibraryPage({ params, adminTools = null }) {
 
       {library.status === "loading" && !library.data && <LoadingState label="Loading the library…" />}
       {library.status === "error" && (
-        <ErrorState message={library.error.message} title="The library could not be loaded." />
+        <ErrorState message="Please check your connection, then try again." title="The library can't be reached right now.">
+          <button className="button" onClick={refreshLibrary} type="button">
+            Retry
+          </button>
+        </ErrorState>
       )}
       {library.data && <Collection adminTools={adminTools} library={library.data} params={params} />}
     </div>

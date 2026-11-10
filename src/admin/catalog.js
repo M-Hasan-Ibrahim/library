@@ -5,9 +5,10 @@
  * Items come from GET /api/admin/items (never cached, drafts included);
  * categories and languages from the public API. With Edit mode off, drafts
  * are left out, so the admin sees exactly what visitors see, only fresher.
- * If the admin API cannot be read, the repository falls back to the public
- * data and `availability` becomes "unavailable": every editing control is
- * then disabled until a retry succeeds.
+ * If the admin API cannot be read, the repository uses the public API instead
+ * (published items only) and `availability` becomes "unavailable": every
+ * editing control is then disabled until a retry succeeds. If neither can be
+ * read, the views show an error with Retry (never other content).
  */
 import { useSyncExternalStore } from "react";
 import { checkAdminSession } from "../services/adminSession.js";

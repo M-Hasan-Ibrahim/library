@@ -169,6 +169,8 @@ export function uploadPdf(baseUrl, file, { onProgress = () => {}, signal } = {})
 
 /** A short, plain-language description of a failure, for the admin. */
 export function describeError(error) {
+  // services/libraryRepository.js: the library itself could not be read.
+  if (error?.name === "LibraryUnavailableError") return "The Library API can't be reached right now, so editing is unavailable.";
   switch (error?.kind) {
     case "session":
       return "Your admin sign-in has expired.";

@@ -1,10 +1,11 @@
 /* Small building blocks shared by the admin views. */
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { ITEM_TITLE_ID } from "../components/ItemView.jsx";
 import useAsync from "../hooks/useAsync.js";
 import useLibraryVersion from "../hooks/useLibraryVersion.js";
 import { ADMIN_LOGIN_URL } from "../services/adminSession.js";
-import { getLibrary } from "../services/libraryRepository.js";
+import { getLibrary, refreshLibrary } from "../services/libraryRepository.js";
 import { describeError } from "./api.js";
 
 /** Renders the admin toolbar into the reading panel's top bar. */
@@ -164,11 +165,50 @@ export function ConfirmBox({ title, children, confirmLabel, onConfirm, onCancel,
   );
 }
 
-/** Categories and languages (for the editor's menus and the previews). */
+// Categories and languages rarely change: the last ones read stay usable if a
+// later refresh fails, so an outage never takes an open editor away.
+let lastMeta = null;
+
+/**
+ * Categories and languages (for the editor's menus and the previews).
+ * `meta` is null only if they have never been read; `error` is set while the
+ * library cannot be read.
+ */
 export function useLibraryMeta() {
   const version = useLibraryVersion();
   const result = useAsync(getLibrary, [version]);
-  return { meta: result.data ?? null, error: result.status === "error" ? result.error : null };
+  if (result.data) lastMeta = result.data;
+  return { meta: result.data ?? lastMeta, error: result.status === "error" ? result.error : null };
+}
+
+/**
+ * In place of an admin panel while the Library API cannot be reached: nothing
+ * can be edited (or saved) until it answers again.
+ */
+export function LibraryUnavailable({ toolsElement }) {
+  return (
+    <>
+      <PanelTools label="Admin" target={toolsElement}>
+        <span className="admin-tools__state">Editing unavailable</span>
+      </PanelTools>
+      <div className="reader">
+        <h2 className="visually-hidden" id={ITEM_TITLE_ID}>
+          Editing is unavailable
+        </h2>
+        <div className="admin-notice admin-notice--error" lang="en" role="alert">
+          <p>
+            <strong>The Library API can't be reached right now, so editing is unavailable.</strong> Changes you had not
+            saved in this tab are kept and offered again.
+          </p>
+          <div className="admin-notice__actions">
+            <button className="button button--small" onClick={refreshLibrary} type="button">
+              Retry
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
 }
 
 const timeFormatter = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });

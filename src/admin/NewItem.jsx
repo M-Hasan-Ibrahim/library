@@ -4,11 +4,11 @@ import { LoadingState } from "../components/StatusMessage.jsx";
 import { closeItem, openItem } from "../router.js";
 import { setEditMode } from "../services/editMode.js";
 import { refreshLibrary } from "../services/libraryRepository.js";
-import { rememberItem } from "./catalog.js";
+import { rememberItem, useAdminCatalog } from "./catalog.js";
 import { emptyForm, reviveForm } from "./editorModel.js";
 import { setPanelNotice } from "./flash.js";
 import ItemEditor from "./ItemEditor.jsx";
-import { PanelTools, useLibraryMeta } from "./ui.jsx";
+import { LibraryUnavailable, PanelTools, useLibraryMeta } from "./ui.jsx";
 import { readUnsaved } from "./unsaved.js";
 
 const CHOICES = [
@@ -23,7 +23,10 @@ const CHOICES = [
  * existing items. Saved as a draft; the panel then shows the new draft.
  */
 export default function NewItem({ toolsElement, closeGuardRef }) {
-  const { meta } = useLibraryMeta();
+  const { meta, error: metaError } = useLibraryMeta();
+  // Nothing can be saved while the admin API is down: no editor until it answers again
+  // (any text typed earlier in this tab is kept and offered again).
+  const unavailable = useAdminCatalog().availability === "unavailable";
   const [start, setStart] = useState(() => {
     const saved = readUnsaved("new");
     const form = saved ? reviveForm(saved.form, saved.type) : null;
@@ -33,6 +36,7 @@ export default function NewItem({ toolsElement, closeGuardRef }) {
   // The new item is a draft: Edit mode shows it once saved.
   useEffect(() => setEditMode(true), []);
 
+  if (unavailable || (!meta && metaError)) return <LibraryUnavailable toolsElement={toolsElement} />;
   if (!meta) return <LoadingState label="Opening…" />;
 
   const choose = (type) => {

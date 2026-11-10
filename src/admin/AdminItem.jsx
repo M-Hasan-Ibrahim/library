@@ -10,7 +10,7 @@ import { formFromItem, reviveForm } from "./editorModel.js";
 import { flash, takePanelNotice } from "./flash.js";
 import HistoryView from "./HistoryView.jsx";
 import ItemEditor from "./ItemEditor.jsx";
-import { ConfirmBox, ErrorNotice, formatDateTime, PanelTools, StatusBadge, useLibraryMeta } from "./ui.jsx";
+import { ConfirmBox, ErrorNotice, formatDateTime, LibraryUnavailable, PanelTools, StatusBadge, useLibraryMeta } from "./ui.jsx";
 import { clearUnsaved, readUnsaved } from "./unsaved.js";
 
 /**
@@ -22,7 +22,7 @@ import { clearUnsaved, readUnsaved } from "./unsaved.js";
  * elsewhere meanwhile (409), it is reloaded and the admin is told to retry.
  */
 export default function AdminItem({ slug, toolsElement, closeGuardRef }) {
-  const { meta } = useLibraryMeta();
+  const { meta, error: metaError } = useLibraryMeta();
   const [load, setLoad] = useState({ status: "loading", error: null });
   const [item, setItem] = useState(null); // the admin API's item (raw, with blocks)
   const [mode, setMode] = useState("view"); // view | edit | history | delete
@@ -138,6 +138,7 @@ export default function AdminItem({ slug, toolsElement, closeGuardRef }) {
       </div>
     );
   }
+  if (!meta && metaError) return <LibraryUnavailable toolsElement={toolsElement} />;
   if (!item || !meta) return <LoadingState label="Opening…" />;
 
   if (mode === "edit") {

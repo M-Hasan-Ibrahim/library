@@ -13,8 +13,8 @@ npm run build     # production build in dist/
 npm run preview   # serve the production build: http://127.0.0.1:4173/
 ```
 
-Without further configuration the site uses the content bundled in
-`src/content/`.
+Without further configuration (no API address) the site uses the content
+bundled in `src/content/`, for local development.
 
 ## How it works
 
@@ -96,7 +96,7 @@ hamza forms, and the attached article "ال".
 src/
   contentTypes.js              Type registry (article, pdf, youtube, link)
   router.js                    URL state: filters, open/close item, Back button
-  services/                    Data access (API with bundled-JSON fallback)
+  services/                    Data access (the API, or the bundled JSON without one)
   lib/                         Pure helpers: YouTube URLs, inline markup, search,
                                content validation, formatting
   components/, pages/          Interface
@@ -109,7 +109,7 @@ db/                            Schema reference and initial data import
 ## Public API
 
 The site reads its content from a read-only JSON API (a Cloudflare Worker
-backed by a D1 database), with the bundled JSON as a fallback:
+backed by a D1 database), its single source of content:
 
 | Endpoint | Response (same shapes as `src/content/`) |
 | -------- | ---------------------------------------- |
@@ -121,7 +121,9 @@ backed by a D1 database), with the bundled JSON as a fallback:
 | `GET /files/<key>` | an uploaded PDF of a published item (`?download=1` to save it) |
 
 Only published content is returned, uploaded PDFs included. If the API is
-unavailable, the site falls back to the bundled JSON.
+unavailable, the site says so and offers a Retry button; it never shows other
+content in its place (the bundled JSON is only used by builds without an API
+address).
 
 ## Tests
 

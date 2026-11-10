@@ -1,44 +1,54 @@
 /**
  * Library data access.
  *
- * This module is the ONLY place the UI gets content from. It has two sources
- * that return the same raw shapes (categories.json, languages.json,
- * items.json and bodies/<slug>.json):
+ * This module is the ONLY place the UI gets content from. Exactly one source
+ * is used, decided by the build:
  *
- *   1. The read-only API Worker backed by Cloudflare D1 (worker/), used only
- *      when the build sets VITE_LIBRARY_API_URL, e.g.
+ *   1. With VITE_LIBRARY_API_URL (production): the API Worker backed by
+ *      Cloudflare D1 (worker/) is the single source of truth, e.g.
  *        VITE_LIBRARY_API_URL=https://api.library.mh-ibrahim.com
  *        GET /api/library        categories, languages, items
  *        GET /api/items/:slug    one item + its rich-text "blocks"
- *   2. The JSON files bundled with the site (src/content/). Always available:
- *      it is the default today and the fallback whenever the API fails.
+ *      If it cannot be read, the views show an error with a Retry button
+ *      (refreshLibrary): content is never taken from anywhere else, so an
+ *      outage can never show deleted, unpublished or outdated items.
+ *   2. Without it (local development, demos): the JSON files in src/content/,
+ *      downloaded only in such builds.
  *
- * Both sources go through the same validation and shaping below, so the UI
- * receives identical objects either way.
+ * Both sources return the same raw shapes and go through the same validation
+ * and shaping below, so the UI receives identical objects either way.
  *
  * While the admin is signed in, the admin layer (src/admin/) plugs in a third
  * source with setAdminSource(): the admin API (never cached, drafts included
- * in Edit mode). If it fails, the public sources above are used and the admin
- * layer disables editing. After the admin saves anything, refreshLibrary()
- * makes every view read the data again. Visitors never use either.
+ * in Edit mode). If it fails, the public API is used and the admin layer
+ * disables editing; if that fails too, the same error is shown. After the
+ * admin saves anything, refreshLibrary() makes every view read the data again.
+ * Visitors never use the admin source.
  */
-import categoriesData from "../content/categories.json";
-import itemsData from "../content/items.json";
-import languagesData from "../content/languages.json";
 import { validateLibrary } from "../lib/validateContent.js";
 import { API_URL } from "./apiConfig.js";
 
 const API_TIMEOUT_MS = 8000;
 
-// Bundled item text is split into separate chunks and only downloaded when opened.
-const bodyLoaders = import.meta.glob("../content/bodies/*.json", { import: "default" });
+// Bundled content exists only in builds WITHOUT an API address. The test is
+// written on the raw build-time constant, so in an API build it is a literal
+// and the bundler leaves the content out entirely: production publishes no
+// copy of src/content/ at all, not even as unused files.
+const BUNDLED = !import.meta.env.VITE_LIBRARY_API_URL;
+const bodyLoaders = BUNDLED ? import.meta.glob("../content/bodies/*.json", { import: "default" }) : {};
 
 /* ---------------------------------------------------------------- sources */
 
 const jsonSource = {
   name: "json",
   async loadLibrary() {
-    return { categories: categoriesData, languages: languagesData, items: itemsData };
+    if (!BUNDLED) throw new Error("This build has no bundled content");
+    const [categories, languages, items] = await Promise.all([
+      import("../content/categories.json"),
+      import("../content/languages.json"),
+      import("../content/items.json"),
+    ]);
+    return { categories: categories.default, languages: languages.default, items: items.default };
   },
   /** Details for one item (no blocks when it has no body file). */
   async loadDetails(slug) {
@@ -88,16 +98,17 @@ const apiSource = {
     }
     return data;
   },
+  /** Details for one item, or null when the API no longer has it (deleted or unpublished meanwhile). */
   async loadDetails(slug) {
     const data = await fetchApi(`/api/items/${encodeURIComponent(slug)}`);
-    if (data === null) throw new Error(`Item "${slug}" is missing from the API`);
+    if (data === null) return null;
     if (!Array.isArray(data.blocks)) throw new Error(`Unexpected /api/items/${slug} response`);
     return itemDetails(data);
   },
 };
 
-const warnFallback = (what, error) =>
-  console.warn(`Library API unavailable (${what}); using the bundled content instead.`, error);
+// Technical details for the console; the views show a plain message.
+const warnUnavailable = (what, error) => console.warn(`Library API unavailable (${what}).`, error);
 
 /* ---------------------------------------------------------------- catalog */
 
@@ -162,19 +173,26 @@ function loadCatalog() {
         return buildCatalog(await source.loadLibrary(), source);
       } catch (error) {
         source.reportFailure?.(error);
-        warnFallback("admin library", error);
+        warnUnavailable("admin library", error);
       }
     }
-    if (API_URL) {
-      try {
-        return buildCatalog(await apiSource.loadLibrary(), apiSource);
-      } catch (error) {
-        warnFallback("library", error);
-      }
+    if (!API_URL) return buildCatalog(await jsonSource.loadLibrary(), jsonSource);
+    try {
+      return buildCatalog(await apiSource.loadLibrary(), apiSource);
+    } catch (error) {
+      warnUnavailable("library", error);
+      throw new LibraryUnavailableError(error);
     }
-    return buildCatalog(await jsonSource.loadLibrary(), jsonSource);
   })();
   return catalogPromise;
+}
+
+/** The API could not be read (network failure, timeout, server error). Retry with refreshLibrary(). */
+export class LibraryUnavailableError extends Error {
+  constructor(cause) {
+    super("The library could not be reached.", { cause });
+    this.name = "LibraryUnavailableError";
+  }
 }
 
 /* ---------------------------------------------------------------- public API */
@@ -191,7 +209,9 @@ export async function getLibrary() {
 /**
  * One item plus its details: text blocks (articles always have blocks; other
  * types may carry optional extra text) and, for a video, its original
- * description. Resolves to null when the item does not exist.
+ * description. Resolves to null when the item does not exist (or no longer
+ * does: deleted or unpublished since the list was read). Never falls back to
+ * other content: an unreachable API rejects (LibraryUnavailableError).
  */
 export async function getItem(slug) {
   const catalog = await loadCatalog();
@@ -202,13 +222,11 @@ export async function getItem(slug) {
   try {
     details = await catalog.source.loadDetails(slug);
   } catch (error) {
-    // Only the public API falls back to the bundled text; the admin never
-    // reads (possibly outdated) bundled text in place of the database.
     if (catalog.source !== apiSource) throw error;
-    warnFallback(`item "${slug}"`, error);
-    details = await jsonSource.loadDetails(slug);
+    warnUnavailable(`item "${slug}"`, error);
+    throw new LibraryUnavailableError(error);
   }
-  return { ...summary, ...details };
+  return details ? { ...summary, ...details } : null;
 }
 
 /* ---------------------------------------------------------------- admin hooks */

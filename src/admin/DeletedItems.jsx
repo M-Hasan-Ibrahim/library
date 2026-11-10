@@ -15,7 +15,7 @@ import { ConfirmBox, ErrorNotice, formatDateTime, PanelTools, useLibraryMeta } f
  * so it is never published again by accident.
  */
 export default function DeletedItems({ toolsElement }) {
-  const { meta } = useLibraryMeta();
+  const { meta, error: metaError } = useLibraryMeta();
   const [list, setList] = useState({ status: "loading", items: [], error: null });
   const [recovered, setRecovered] = useState({}); // id -> recovered item
   const [preview, setPreview] = useState(null); // { entry, status, item, error }
@@ -95,7 +95,10 @@ export default function DeletedItems({ toolsElement }) {
           <ErrorNotice error={error} />
           <ErrorNotice error={preview.error} onRetry={() => showPreview(preview.entry)} />
         </div>
-        {(preview.status === "loading" || !meta) && <LoadingState label="Opening…" />}
+        {!meta && metaError && (
+          <ErrorNotice error={metaError} onRetry={refreshLibrary} retryLabel="Retry" />
+        )}
+        {(preview.status === "loading" || (!meta && !metaError)) && <LoadingState label="Opening…" />}
         {preview.item && meta && <ItemView item={shapeItem(preview.item, meta)} />}
       </>
     );
