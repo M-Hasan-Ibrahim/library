@@ -31,13 +31,17 @@ bundled in `src/content/`, for local development.
 
 ## Content model
 
+Production content lives in the D1 database and is edited through the site's
+admin interface. The files below hold sample content with the same shapes,
+used only for local development (builds without an API address) and tests:
+
 ```
 src/content/
   categories.json        Subjects (Science, Thoughts, …) — data, not code
   languages.json         en / ar with text direction
   items.json             Every item (metadata)
   bodies/<slug>.json     Optional rich text for any item (required for articles)
-public/documents/        PDF files
+test/fixtures/documents/ Sample PDFs (served by `npm run dev`; never published)
 ```
 
 Common fields on every item:

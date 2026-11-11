@@ -38,14 +38,16 @@ jobs:
           # Data source switch. Empty (variable not defined) = bundled JSON.
           # To read from D1, define the repository variable LIBRARY_API_URL
           # (Settings > Secrets and variables > Actions > Variables), e.g.
-          # https://api.library.mh-ibrahim.com. The site falls back to JSON on errors.
+          # https://api.library.mh-ibrahim.com. With it, the site reads only the API
+          # (no bundled content is included in the build).
           VITE_LIBRARY_API_URL: ${{ vars.LIBRARY_API_URL }}
 
       - name: Check build output
         run: |
           test -f dist/index.html
           test -f dist/CNAME
-          test -f dist/documents/gradient-descent-lecture-notes.pdf
+          # The sample PDFs (test/fixtures/documents) must never be published.
+          test ! -e dist/documents
           echo "CNAME: $(cat dist/CNAME)"
 
       - name: Add SPA fallback
