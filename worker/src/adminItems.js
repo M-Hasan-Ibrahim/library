@@ -61,6 +61,15 @@ const SQL = {
     "SELECT 1 AS taken FROM items WHERE slug = ?1 " +
     "UNION ALL SELECT 1 FROM revisions WHERE entity_type = 'item' AND json_extract(snapshot_json, '$.slug') = ?1 LIMIT 1",
   insert: `INSERT INTO items (${COLUMNS.join(", ")}) VALUES (${COLUMNS.map((_, i) => `?${i + 1}`).join(", ")})`,
+  // The same insert, but only while the creator (?N+1) has made fewer than ?N+2
+  // items in the last 24 hours. It runs inside the create batch (one D1
+  // transaction), so the count and the insert are atomic: concurrent requests
+  // cannot both see room for the last slot. When it inserts nothing, the
+  // batch's history statement records nothing either.
+  insertWithinDailyLimit:
+    `INSERT INTO items (${COLUMNS.join(", ")}) SELECT ${COLUMNS.map((_, i) => `?${i + 1}`).join(", ")} ` +
+    "WHERE (SELECT count(*) FROM revisions WHERE entity_type = 'item' AND action = 'create' " +
+    `AND changed_by = ?${COLUMNS.length + 1} AND changed_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 day')) < ?${COLUMNS.length + 2}`,
   // Records the item's row as it is at revision ?2 (only if it is there).
   record:
     "INSERT INTO revisions (entity_type, entity_id, revision, action, snapshot_json, changed_by, note) " +
@@ -229,19 +238,36 @@ export async function getItem(db, id) {
   return { item: toAdminItem(await requireRow(db, id)) };
 }
 
-/** New items are always drafts at revision 1. `env` locates uploaded files. */
-export async function createItem(db, input, email, env = {}) {
+/**
+ * New items are always drafts at revision 1. `env` locates uploaded files.
+ * `dailyLimit` (optional, used by the integration API): the most items `email`
+ * may create per rolling 24 hours, enforced atomically in the create batch;
+ * over the limit, nothing is written and a 429 HttpError is thrown.
+ */
+export async function createItem(db, input, email, env = {}, { dailyLimit } = {}) {
   const { type, slug: requestedSlug, fields } = parseCreateInput(input, inputOptions(env));
   const context = await contentContext(db);
   const id = newItemId();
   const slug = await chooseSlug(db, requestedSlug, fields.title);
   const row = newRow({ id, slug, type, fields });
   assertValidRow(row, context, toItem);
-  await runBatch(db, [
-    db.prepare(SQL.insert).bind(...rowValues(row)),
+  const limited = Number.isInteger(dailyLimit) && dailyLimit >= 0;
+  const insert = limited
+    ? db.prepare(SQL.insertWithinDailyLimit).bind(...rowValues(row), email, dailyLimit)
+    : db.prepare(SQL.insert).bind(...rowValues(row));
+  const attach = await attachStatements(db, row.file_url, env);
+  // An attach statement is not conditional on the item row, so a limited create
+  // could leave an upload marked as used: refuse that combination outright.
+  if (limited && attach.length) throw new Error("dailyLimit cannot be combined with an uploaded file");
+  const [inserted] = await runBatch(db, [
+    insert,
     db.prepare(SQL.record).bind(id, 1, "create", email, ""),
-    ...(await attachStatements(db, row.file_url, env)),
+    ...attach,
   ], id);
+  if (limited && Number(inserted?.meta?.changes) !== 1) {
+    // Nothing was written: the history row is conditional on the item row.
+    throw new HttpError(429, { error: `Daily limit reached (${dailyLimit} items per 24 hours)`, code: "quota_exceeded" });
+  }
   log("create", id, 1);
   return { item: toAdminItem(await requireRow(db, id)) };
 }

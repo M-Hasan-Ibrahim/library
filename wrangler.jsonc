@@ -36,7 +36,17 @@
     // it is uploaded with `npx wrangler@4 deploy --secrets-file <file>`.
     // YOUTUBE_API_KEY (optional) is a Worker secret too: without it, video
     // lookups fall back to YouTube's oEmbed (title and channel only).
+    // INTEGRATION_TOKEN_SHA256 (optional) is a Worker secret: the SHA-256 hex
+    // digest of the integration API token (worker/src/integrations.js). Without
+    // it, POST /api/integrations/drafts is disabled (503).
   },
+  // Burst limit for POST /api/integrations/drafts (Workers Rate Limiting,
+  // per Cloudflare location): 10 requests per 60 s per token, and per client
+  // IP for failed sign-ins. REQUIRED: without it the route refuses every
+  // request (503, fail closed). A daily quota is also enforced atomically in D1.
+  "ratelimits": [
+    { "name": "INTEGRATION_RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } }
+  ],
   // Uploaded PDFs (Cloudflare R2). The bucket must exist before deploying.
   // It stays private (no public access, no r2.dev address): the Worker serves
   // a file at <PUBLIC_API_URL>/files/<key> only while a published item uses it.

@@ -9,7 +9,7 @@
  *   GET /files/<key>        an uploaded PDF from R2, only while a published item
  *                           uses it (files.js; Range and ?download=1)
  *
- * Only GET, HEAD and OPTIONS are accepted; there is no write path.
+ * Only GET, HEAD and OPTIONS are accepted on these public routes.
  *
  * scheduled (Cron Trigger in wrangler.jsonc, hourly): removes uploaded files
  * that nothing uses, a day after their upload (files.js cleanupOrphans).
@@ -19,11 +19,14 @@
  *
  * /api/admin/* is handled separately by admin.js (Cloudflare Access sign-in,
  * verified here on every request).
+ * /api/integrations/* is handled separately by integrations.js (a dedicated
+ * API token that can only create article drafts; no admin rights).
  */
 import { handleAdmin, isAdminPath } from "./admin.js";
 import { getCategories, getItem, getItems, getLanguages, getLibrary } from "./content.js";
 import { cleanupOrphans, servePublicFile } from "./files.js";
 import { allowedOrigin, json } from "./http.js";
+import { handleIntegration, isIntegrationPath } from "./integrations.js";
 
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MAX_SLUG_LENGTH = 120;
@@ -72,6 +75,7 @@ export default {
   async fetch(request, env) {
     const { pathname } = new URL(request.url);
     if (isAdminPath(pathname)) return handleAdmin(request, env, pathname);
+    if (isIntegrationPath(pathname)) return handleIntegration(request, env, pathname);
 
     const cors = corsHeaders(request, env);
 
