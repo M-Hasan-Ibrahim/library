@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
 import { afterEach, beforeEach, describe, test } from "node:test";
 import { clearSigningKeyCache } from "../src/access.js";
+import { createItem } from "../src/adminItems.js";
 import worker from "../src/index.js";
 import { DAILY_DRAFT_LIMIT, INTEGRATION_ACTOR, MAX_BODY_BYTES } from "../src/integrations.js";
 import { ADMIN, AUD, CERTS_URL, createSigningKey, signToken, SITE, TEAM, validClaims } from "./helpers.mjs";
@@ -300,9 +301,37 @@ describe("request limits and rate limiting", () => {
     assert.ok(!limiterCalls.some((key) => key.includes(TOKEN)), "the token itself is never used as a key");
   });
 
-  test("works without the rate limiter binding (daily quota still applies)", async () => {
-    delete env.INTEGRATION_RATE_LIMITER;
-    assert.equal((await createDraft()).status, 201);
+  test("fail closed: missing or misconfigured rate limiter binding -> 503, nothing created", async () => {
+    const before = itemCount();
+    for (const binding of [undefined, null, {}, { limit: "yes" }, "INTEGRATION_RATE_LIMITER", 42]) {
+      env.INTEGRATION_RATE_LIMITER = binding;
+      for (const token of [TOKEN, OTHER_TOKEN, null]) {
+        const res = await createDraft({ token });
+        await assertNothingCreated(before, res, 503);
+        assert.equal(res.data.code, "rate_limiter_unavailable");
+      }
+    }
+  });
+
+  test("fail closed: rate limiter errors or unexpected answers -> 503, nothing created", async () => {
+    const before = itemCount();
+    const answers = [
+      async () => {
+        throw new Error("limiter outage");
+      },
+      async () => undefined,
+      async () => ({}),
+      async () => ({ success: "true" }),
+      async () => ({ success: 1 }),
+    ];
+    for (const limit of answers) {
+      env.INTEGRATION_RATE_LIMITER = { limit };
+      for (const token of [TOKEN, OTHER_TOKEN]) {
+        const res = await createDraft({ token });
+        await assertNothingCreated(before, res, 503);
+        assert.equal(res.data.code, "rate_limiter_unavailable");
+      }
+    }
   });
 
   test("daily quota in D1 -> 429 once reached", async () => {
@@ -320,6 +349,84 @@ describe("request limits and rate limiting", () => {
     const res = await createDraft({ body: { ...ARTICLE, title: "One too many" } });
     await assertNothingCreated(before, res, 429);
     assert.equal(res.data.code, "quota_exceeded");
+    assert.equal(res.headers.get("retry-after"), "3600");
+  });
+});
+
+/* ------------------------------------------------------------ atomic quota */
+
+describe("daily quota is atomic (checked inside the create transaction)", () => {
+  const actorCreates = () =>
+    Number(db.raw.prepare("SELECT count(*) AS n FROM revisions WHERE entity_type = 'item' AND action = 'create' AND changed_by = ?").get(INTEGRATION_ACTOR).n);
+  const fillQuota = (n) => {
+    const insert = db.raw.prepare(
+      "INSERT INTO revisions (entity_type, entity_id, revision, action, snapshot_json, changed_by) VALUES ('item', ?, 1, 'create', '{}', ?)",
+    );
+    for (let i = 0; i < n; i += 1) insert.run(`itm_fill${i}`, INTEGRATION_ACTOR);
+  };
+  const orphanRevisions = () =>
+    Number(db.raw.prepare("SELECT count(*) AS n FROM revisions r WHERE r.entity_id LIKE 'itm_%' AND r.entity_id NOT LIKE 'itm_fill%' AND r.entity_id <> 'itm_rival' AND r.action = 'create' AND NOT EXISTS (SELECT 1 FROM items i WHERE i.id = r.entity_id)").get().n);
+
+  test("a rival draft committed after this request's checks but before its insert -> 429, nothing written", async () => {
+    fillQuota(DAILY_DRAFT_LIMIT - 1);
+    // Simulates a concurrent request winning the last slot between this
+    // request's validation and its create batch (the race of the old pre-check).
+    const realBatch = db.batch.bind(db);
+    let raced = false;
+    db.batch = async (statements) => {
+      if (!raced && statements.some((s) => /^INSERT INTO items/.test(s.sql))) {
+        raced = true;
+        db.raw.prepare(
+          "INSERT INTO revisions (entity_type, entity_id, revision, action, snapshot_json, changed_by) VALUES ('item', 'itm_rival', 1, 'create', '{}', ?)",
+        ).run(INTEGRATION_ACTOR);
+      }
+      return realBatch(statements);
+    };
+    const before = itemCount();
+    const res = await createDraft();
+    assert.ok(raced, "the create batch ran");
+    await assertNothingCreated(before, res, 429);
+    assert.equal(res.data.code, "quota_exceeded");
+    assert.equal(actorCreates(), DAILY_DRAFT_LIMIT, "never more than the limit");
+    assert.equal(orphanRevisions(), 0, "no history row without its item");
+  });
+
+  test("many concurrent requests at the edge never exceed the limit", async () => {
+    fillQuota(DAILY_DRAFT_LIMIT - 3);
+    const before = itemCount();
+    const results = await Promise.all(
+      Array.from({ length: 10 }, (_, i) => createDraft({ body: { ...ARTICLE, title: `Concurrent ${i}` } })),
+    );
+    const statuses = results.map((r) => r.status);
+    assert.equal(statuses.filter((s) => s === 201).length, 3, statuses.join(" "));
+    assert.equal(statuses.filter((s) => s === 429).length, 7, statuses.join(" "));
+    assert.equal(itemCount(), before + 3);
+    assert.equal(actorCreates(), DAILY_DRAFT_LIMIT);
+    assert.equal(orphanRevisions(), 0);
+    for (const r of results.filter((x) => x.status === 201)) {
+      const row = rawRow(r.data.id);
+      assert.equal(row.status, "draft");
+      assert.equal(row.revision, 1);
+      const history = db.raw.prepare("SELECT revision, action, changed_by FROM revisions WHERE entity_id = ?").all(r.data.id).map((h) => ({ ...h }));
+      assert.deepEqual(history, [{ revision: 1, action: "create", changed_by: INTEGRATION_ACTOR }]);
+    }
+  });
+
+  test("createItem without dailyLimit (the admin path) is unchanged and not limited", async () => {
+    fillQuota(DAILY_DRAFT_LIMIT + 5); // the integration's quota does not affect the admin
+    const { item } = await createItem(db, { ...ARTICLE, title: "Admin draft" }, ADMIN, env);
+    assert.equal(item.status, "draft");
+    assert.equal(rawRow(item.id).revision, 1);
+  });
+
+  test("createItem with dailyLimit refuses atomically at the limit (direct call)", async () => {
+    const before = itemCount();
+    await assert.rejects(createItem(db, ARTICLE, "someone", env, { dailyLimit: 0 }), (error) => error.status === 429 && error.body.code === "quota_exceeded");
+    assert.equal(itemCount(), before);
+    assert.equal(Number(db.raw.prepare("SELECT count(*) AS n FROM revisions WHERE changed_by = 'someone'").get().n), 0);
+    const { item } = await createItem(db, ARTICLE, "someone", env, { dailyLimit: 1 });
+    assert.equal(item.status, "draft");
+    await assert.rejects(createItem(db, { ...ARTICLE, title: "Second" }, "someone", env, { dailyLimit: 1 }), (error) => error.status === 429);
   });
 });
 

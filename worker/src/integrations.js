@@ -17,10 +17,13 @@
  * is enough; comparison is constant-time. Removing the secret revokes the
  * integration (the route then answers 503).
  *
- * Limits: JSON only, body at most MAX_BODY_BYTES; rate limited by the optional
- * Workers Rate Limiting binding INTEGRATION_RATE_LIMITER (bursts; failed
- * sign-ins are limited per client IP) and by a daily quota counted in D1
- * (DAILY_DRAFT_LIMIT drafts per rolling 24 hours, always enforced).
+ * Limits: JSON only, body at most MAX_BODY_BYTES; rate limited by the
+ * REQUIRED Workers Rate Limiting binding INTEGRATION_RATE_LIMITER (bursts;
+ * failed sign-ins are limited per client IP) and by a daily quota in D1
+ * (DAILY_DRAFT_LIMIT drafts per rolling 24 hours), checked atomically in the
+ * same D1 transaction that creates the draft (createItem's dailyLimit).
+ * Fail closed: if the binding is missing, misconfigured or failing, every
+ * request is refused (503) instead of skipping the protection.
  *
  * No CORS headers are sent: the route is for server-to-server clients, so
  * browsers on other sites can neither call it with a token nor read answers.
@@ -42,12 +45,6 @@ const PUBLISH_FIELDS = new Set(["status", "published", "publish", "publishedAt",
 const TOKEN_FORMAT = /^lib_int_[A-Za-z0-9_-]{43}$/; // "lib_int_" + 32 random bytes, base64url
 const DIGEST_FORMAT = /^[0-9a-f]{64}$/;
 const HEADERS = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex" };
-
-const SQL = {
-  recentDrafts:
-    "SELECT count(*) AS n FROM revisions WHERE entity_type = 'item' AND action = 'create' " +
-    "AND changed_by = ?1 AND changed_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 day')",
-};
 
 export const isIntegrationPath = (pathname) => pathname === "/api/integrations" || pathname.startsWith(INTEGRATION_PREFIX);
 
@@ -85,18 +82,22 @@ async function authenticate(request, digests) {
 
 /* ------------------------------------------------------------ limits */
 
-/** true when the Workers Rate Limiting binding allows the request (or is not configured). */
-async function withinRateLimit(env, key) {
-  const limiter = env.INTEGRATION_RATE_LIMITER;
-  if (!limiter || typeof limiter.limit !== "function") return true;
+const hasRateLimiter = (env) => typeof env.INTEGRATION_RATE_LIMITER?.limit === "function";
+
+/**
+ * "allowed", "limited", or "unavailable" (binding failed or answered something
+ * unexpected). Callers treat "unavailable" as a refusal: fail closed.
+ */
+async function rateLimit(env, key) {
   try {
-    const { success } = await limiter.limit({ key });
-    return success;
+    const outcome = await env.INTEGRATION_RATE_LIMITER.limit({ key });
+    if (outcome?.success === true) return "allowed";
+    if (outcome?.success === false) return "limited";
+    console.error("Integration rate limiter returned an unexpected result");
   } catch (error) {
-    // The D1 quota still applies; a limiter outage must not stop the API.
     console.error("Integration rate limiter error:", error instanceof Error ? error.message : error);
-    return true;
   }
+  return "unavailable";
 }
 
 async function readBody(request) {
@@ -167,34 +168,42 @@ export async function handleIntegration(request, env, pathname) {
     return reply(503, { error: "This integration is not enabled" });
   }
 
+  if (!hasRateLimiter(env)) {
+    console.error("Integration request refused: the INTEGRATION_RATE_LIMITER binding is missing or misconfigured");
+    return reply(503, { error: "This integration is temporarily unavailable", code: "rate_limiter_unavailable" });
+  }
+  const limitReply = (outcome) =>
+    outcome === "limited"
+      ? reply(429, { error: "Too many requests", code: "rate_limited" }, { "Retry-After": "60" })
+      : reply(503, { error: "This integration is temporarily unavailable", code: "rate_limiter_unavailable" });
+
   const digest = await authenticate(request, digests);
   if (!digest) {
     const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
     // The token itself is never logged.
     console.warn(`Integration request rejected (bad or missing token): ${request.method} ${pathname}`);
-    if (!(await withinRateLimit(env, `unauthorized:${ip}`))) return reply(429, { error: "Too many requests", code: "rate_limited" }, { "Retry-After": "60" });
+    const outcome = await rateLimit(env, `unauthorized:${ip}`);
+    if (outcome !== "allowed") return limitReply(outcome);
     return reply(401, { error: "Unauthorized" }, { "WWW-Authenticate": 'Bearer realm="library-integrations"' });
   }
 
-  if (!(await withinRateLimit(env, `token:${digest.slice(0, 16)}`))) {
-    return reply(429, { error: "Too many requests", code: "rate_limited" }, { "Retry-After": "60" });
-  }
+  const outcome = await rateLimit(env, `token:${digest.slice(0, 16)}`);
+  if (outcome !== "allowed") return limitReply(outcome);
 
   try {
     const body = await readBody(request);
     const input = draftInput(body);
-    const recent = await env.DB.prepare(SQL.recentDrafts).bind(INTEGRATION_ACTOR).first("n");
-    if (Number(recent) >= DAILY_DRAFT_LIMIT) {
-      return reply(429, { error: `Daily limit reached (${DAILY_DRAFT_LIMIT} drafts per 24 hours)`, code: "quota_exceeded" }, { "Retry-After": "3600" });
-    }
-    const { item } = await createItem(env.DB, input, INTEGRATION_ACTOR, env);
+    // The daily quota is checked inside the create transaction (atomic).
+    const { item } = await createItem(env.DB, input, INTEGRATION_ACTOR, env, { dailyLimit: DAILY_DRAFT_LIMIT });
     console.log(`Integration draft created: ${item.id}`);
     return reply(201, { id: item.id, status: "draft" });
   } catch (error) {
     if (error instanceof ValidationError) {
       return reply(422, { error: "Some fields are not valid", code: "validation", fields: error.fields });
     }
-    if (error instanceof HttpError) return reply(error.status, error.body);
+    if (error instanceof HttpError) {
+      return reply(error.status, error.body, error.status === 429 ? { "Retry-After": "3600" } : undefined);
+    }
     console.error("Integration draft failed:", error instanceof Error ? error.message : error);
     return reply(500, { error: "Internal error" });
   }

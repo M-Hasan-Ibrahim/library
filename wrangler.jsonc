@@ -42,7 +42,8 @@
   },
   // Burst limit for POST /api/integrations/drafts (Workers Rate Limiting,
   // per Cloudflare location): 10 requests per 60 s per token, and per client
-  // IP for failed sign-ins. A daily quota is also enforced in D1.
+  // IP for failed sign-ins. REQUIRED: without it the route refuses every
+  // request (503, fail closed). A daily quota is also enforced atomically in D1.
   "ratelimits": [
     { "name": "INTEGRATION_RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } }
   ],
