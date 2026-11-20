@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1",
     "test:worker": "node --test --disable-warning=ExperimentalWarning \"worker/test/*.test.mjs\"",
-    "test:admin": "node --test --disable-warning=ExperimentalWarning \"test/admin/*.test.mjs\""
+    "test:admin": "node --test --disable-warning=ExperimentalWarning \"test/admin/*.test.mjs\"",
+    "test:mcp": "npm --prefix mcp test"
   },
   "dependencies": {
     "@tiptap/core": "3.32.0",
