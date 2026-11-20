@@ -1,0 +1,15 @@
+{
+  "name": "library-mcp",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "test": "node --import ./test/support/register.mjs --test --disable-warning=ExperimentalWarning \"test/*.test.mjs\""
+  },
+  "dependencies": {
+    "@cloudflare/workers-oauth-provider": "1.2.4"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2"
+  }
+}

@@ -1,0 +1,45 @@
+// Cloudflare configuration for library-mcp: the remote MCP server that lets the
+// owner's Claude.ai connector create PRIVATE drafts in the Library (src/index.js).
+// Deploy from this folder: `npx wrangler@4 deploy` (see README.md).
+{
+  "name": "library-mcp",
+  "main": "src/index.js",
+  "compatibility_date": "2026-11-01",
+
+  // Public address (Cloudflare Custom Domain; wrangler creates DNS + certificate).
+  "routes": [{ "pattern": "mcp.library.mh-ibrahim.com", "custom_domain": true }],
+  "workers_dev": false,
+  "preview_urls": false,
+  "observability": { "enabled": true },
+
+  "vars": {
+    // Must match the custom domain: the OAuth resource is <PUBLIC_URL>/mcp.
+    "PUBLIC_URL": "https://mcp.library.mh-ibrahim.com",
+    // Cloudflare Access in front of /authorize only (not secrets).
+    "ACCESS_TEAM_DOMAIN": "mh-ibrahim.cloudflareaccess.com",
+    // "Application Audience (AUD) Tag" of the Access application "Library MCP authorize".
+    // Until it is set, /authorize refuses every request (503).
+    "ACCESS_AUD": "REPLACE_WITH_ACCESS_AUD_OF_LIBRARY_MCP_AUTHORIZE",
+    // Anthropic's published OUTBOUND IPv4 ranges (platform.claude.com/docs/en/api/ip-addresses,
+    // checked 2026-11-20); only they may call /mcp and /token (MCP calls, code exchange,
+    // refresh, revocation). Connectors are IPv4-only. Update here if Anthropic announces a change.
+    "ALLOWED_CLIENT_CIDRS": "160.79.104.0/21,153.61.208.0/20",
+    // Browser origins allowed on /mcp (requests without Origin are fine).
+    "MCP_ALLOWED_ORIGINS": "https://claude.ai,https://claude.com",
+    // Base URL used for the request sent through the LIBRARY_API service binding.
+    "LIBRARY_API_URL": "https://api.library.mh-ibrahim.com"
+    // Secrets (never in this file): ADMIN_EMAIL (the one allowed Google account)
+    // and LIBRARY_INTEGRATION_TOKEN (the Library integration token).
+  },
+
+  // OAuth clients, grants and tokens (stored hashed/encrypted by the library).
+  "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "REPLACE_WITH_KV_NAMESPACE_ID" }],
+
+  // The Library API Worker, called directly (no public internet hop).
+  "services": [{ "binding": "LIBRARY_API", "service": "library-api" }],
+
+  // Per-user limit on /mcp requests. REQUIRED: without it /mcp refuses requests.
+  "ratelimits": [
+    { "name": "MCP_RATE_LIMITER", "namespace_id": "1002", "simple": { "limit": 20, "period": 60 } }
+  ]
+}
