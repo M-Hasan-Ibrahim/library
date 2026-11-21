@@ -17,9 +17,9 @@
     "PUBLIC_URL": "https://mcp.library.mh-ibrahim.com",
     // Cloudflare Access in front of /authorize only (not secrets).
     "ACCESS_TEAM_DOMAIN": "mh-ibrahim.cloudflareaccess.com",
-    // "Application Audience (AUD) Tag" of the Access application "Library MCP authorize".
-    // Until it is set, /authorize refuses every request (503).
-    "ACCESS_AUD": "REPLACE_WITH_ACCESS_AUD_OF_LIBRARY_MCP_AUTHORIZE",
+    // "Application Audience (AUD) Tag" of the Access application "Library MCP authorize"
+    // (mcp.library.mh-ibrahim.com/authorize). Not a secret: it appears in the Access login URL.
+    "ACCESS_AUD": "239235edf03c239ab42ece50f0e6baab18be23099e113b8b615d323d1e9650a4",
     // Anthropic's published OUTBOUND IPv4 ranges (platform.claude.com/docs/en/api/ip-addresses,
     // checked 2026-11-20); only they may call /mcp and /token (MCP calls, code exchange,
     // refresh, revocation). Connectors are IPv4-only. Update here if Anthropic announces a change.
@@ -33,7 +33,8 @@
   },
 
   // OAuth clients, grants and tokens (stored hashed/encrypted by the library).
-  "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "REPLACE_WITH_KV_NAMESPACE_ID" }],
+  // KV namespace "library-mcp-oauth" (an identifier, not a secret).
+  "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "17492e1e46924269b374c2dc195c1d29" }],
 
   // The Library API Worker, called directly (no public internet hop).
   "services": [{ "binding": "LIBRARY_API", "service": "library-api" }],
