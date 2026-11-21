@@ -4,6 +4,32 @@ dist
 .DS_Store
 
 # Local environment overrides (Vite and Wrangler)
-.env.local
-.env.*.local
+.env
+.env.*
+!.env.example
 .dev.vars
+.dev.vars.*
+
+# Secrets and credentials: never commit (they live in Worker secrets or a private folder)
+*.pem
+*.key
+*.p12
+*.pfx
+secrets.json
+secrets.*.json
+*-secrets.json
+credentials.json
+*-credentials.json
+*token*.txt
+*oauth-client*.txt
+*client-record*.json
+.library-secrets/
+
+# Backups and local database copies (migrations/*.sql and db/*.sql stay tracked)
+backups/
+*.sqlite
+*.sqlite3
+*.sqlite-*
+*.db
+*.dump
+*.bak
