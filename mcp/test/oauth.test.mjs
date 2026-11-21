@@ -200,6 +200,46 @@ describe("authorization endpoint: who may approve", () => {
     }
   });
 
+  // Regression (2026-11-21, "Cross-site request refused" in Claude.ai): the consent page was
+  // served with Referrer-Policy: no-referrer, so browsers sent `Origin: null` on its POST.
+  test("a browser's real Origin for the consent POST (derived from the page's Referrer-Policy) is accepted", async () => {
+    // What a browser sends as Origin on a same-origin form POST, per the Fetch standard
+    // ("append a request Origin header"), observed in Chromium: "null" under no-referrer.
+    const browserOrigin = (page) => {
+      const policy = (page.headers.get("referrer-policy") ?? "strict-origin-when-cross-origin").split(",").map((p) => p.trim()).filter(Boolean).at(-1);
+      return policy === "no-referrer" ? "null" : PUBLIC; // every other policy keeps a same-origin https Origin
+    };
+    const client = await registerClient(env);
+    const { verifier, challenge } = pkce();
+    const { page, post } = await consent(env, authorizeQuery(client.clientId, challenge), { originFromPage: browserOrigin, extraHeaders: { "Sec-Fetch-Site": "same-origin" } });
+    assert.notEqual(page.headers.get("referrer-policy"), "no-referrer", "no-referrer makes browsers send Origin: null");
+    assert.equal(page.headers.get("referrer-policy"), "same-origin");
+    assert.equal(post.status, 302, post.text.slice(0, 200));
+    const location = new URL(post.headers.get("location"));
+    assert.equal(`${location.origin}${location.pathname}`, CLAUDE_CALLBACK);
+    assert.equal((await exchangeCode(env, client, location.searchParams.get("code"), verifier)).status, 200);
+  });
+
+  test("CSRF stays strict: Origin null and non-same-origin Fetch Metadata are refused", async () => {
+    const client = await registerClient(env);
+    const query = authorizeQuery(client.clientId, pkce().challenge);
+    assert.equal((await consent(env, query, { origin: "null" })).post.status, 403);
+    for (const site of ["cross-site", "same-site", "none"]) {
+      const { post } = await consent(env, query, { extraHeaders: { "Sec-Fetch-Site": site } });
+      assert.equal(post.status, 403, site);
+      assert.equal(post.headers.get("location"), null);
+    }
+    assert.equal((await consent(env, query, { extraHeaders: { "Sec-Fetch-Site": "same-origin" } })).post.status, 302);
+  });
+
+  test("redirects back to Claude carry no Referer (Referrer-Policy: no-referrer)", async () => {
+    const client = await registerClient(env);
+    const approve = await consent(env, authorizeQuery(client.clientId, pkce().challenge));
+    assert.equal(approve.post.headers.get("referrer-policy"), "no-referrer");
+    const deny = await consent(env, authorizeQuery(client.clientId, pkce().challenge), { decision: "deny" });
+    assert.equal(deny.post.headers.get("referrer-policy"), "no-referrer");
+  });
+
   test("Deny -> redirect to Claude with access_denied, no code", async () => {
     const client = await registerClient(env);
     const { post } = await consent(env, authorizeQuery(client.clientId, pkce().challenge), { decision: "deny" });
