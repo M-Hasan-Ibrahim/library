@@ -47,11 +47,17 @@ including the official MCP SDK client over Streamable HTTP.
 
 ## Deployment (each step changes production: do it deliberately)
 
+The server is deployed at `https://mcp.library.mh-ibrahim.com/mcp`. These steps rebuild it from scratch.
 Run from the repository root unless noted. Secrets are typed at Wrangler prompts or piped from files; never
 on the command line.
 
-1. **KV namespace:** `npx wrangler@4 kv namespace create library-mcp-oauth` → put the printed id in
-   `mcp/wrangler.jsonc` (`kv_namespaces[0].id`).
+0. **DNS CAA record (before the first deploy):** in the `mh-ibrahim.com` zone add a CAA record on
+   `mcp.library`: flags `0`, tag `issue`, value `pki.goog` (the same as `api.library` has). Without it the
+   certificate cannot be issued: `library.mh-ibrahim.com` is a CNAME to GitHub Pages, so names under it inherit
+   GitHub's CAA policy (DigiCert, Let's Encrypt, Sectigo), which excludes Cloudflare's certificate authority
+   (Google Trust Services). Any new `*.library.mh-ibrahim.com` hostname needs the same record.
+1. **KV namespace:** `npx wrangler@4 kv namespace create library-mcp-oauth --config mcp/wrangler.jsonc`
+   (answer *No* if asked to edit the config) → put the printed id in `mcp/wrangler.jsonc` (`kv_namespaces[0].id`).
 2. **Access application** (Zero Trust → Access → Applications → Add → Self-hosted): name
    "Library MCP authorize", domain `mcp.library.mh-ibrahim.com`, path `authorize`, identity provider Google,
    policy *Allow* for the owner's email only. Copy its **Application Audience (AUD) Tag** into
@@ -68,7 +74,29 @@ on the command line.
    the private file → Add → Connect → Google sign-in (Access) → **Allow**.
 7. **Check:** ask Claude to create a test draft; confirm it in the Library admin, then delete it.
 
-**Revoke Claude's access:** delete the KV keys starting with `grant:owner:` and `token:owner:` (or the client,
-`client:<id>`, to stop new sign-ins too), or remove the connector in Claude.ai. **Cut off the Library itself:**
-rotate or delete the integration token on the Library API (`INTEGRATION_TOKEN_SHA256` on `library-api`). **Roll back:** `npx wrangler@4 rollback <version> --name library-mcp`,
-or `npx wrangler@4 delete --name library-mcp` to remove the server entirely.
+Read-only health check after any change: `/.well-known/oauth-protected-resource/mcp` and
+`/.well-known/oauth-authorization-server` answer 200; `/authorize` redirects to the Cloudflare Access login;
+`/mcp` and `/token` answer 403 from outside Claude's ranges; `/register` answers 404.
+
+## Troubleshooting
+
+| Symptom | Cause and fix |
+|---|---|
+| HTTPS handshake fails right after the first deploy; the certificate shows "Pending Validation (Error)" | The CAA record (step 0) is missing. After adding it, a "multiple perspective CAA check error" can persist for up to about an hour (resolvers cache the earlier "no CAA" answer for 30 minutes); Cloudflare retries by itself. |
+| Consent page says "Cross-site request refused" | The browser sent no matching `Origin`. The page must keep `Referrer-Policy: same-origin`: under `no-referrer` browsers send `Origin: null` on the form's POST (regression-tested). |
+| `/authorize` answers 503 | `ADMIN_EMAIL` or `ACCESS_AUD` is missing or malformed. |
+| Claude cannot connect or refresh; logs show "source address … not allowed" | Anthropic changed its outbound ranges: update `ALLOWED_CLIENT_CIDRS` from platform.claude.com/docs/en/api/ip-addresses and redeploy. |
+| The tool answers "not available right now" | `LIBRARY_INTEGRATION_TOKEN` is missing, or no longer matches the digest on `library-api`. |
+
+## Recovery
+
+- **Revoke Claude's access:** remove the connector in Claude.ai, or delete the KV keys starting with
+  `grant:owner:` and `token:owner:`; delete the client (`client:<id>`) to stop new sign-ins too.
+- **Cut off the Library itself:** rotate or delete the integration token's digest on the Library API
+  (`INTEGRATION_TOKEN_SHA256` on `library-api`); this server then fails closed.
+- **Roll back the server:** `npx wrangler@4 rollback <version-id> --name library-mcp`
+  (`npx wrangler@4 versions list --name library-mcp` lists versions), or
+  `npx wrangler@4 delete --name library-mcp` to remove it entirely.
+- **Rotate the OAuth client:** create a new one (step 5), update the connector in Claude.ai (remove and
+  re-add it), then delete the old `client:<id>` key.
+- KV holds only OAuth state; it can always be recreated (clients from step 5, grants by reconnecting).

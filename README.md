@@ -106,6 +106,9 @@ src/
   components/, pages/          Interface
   styles/                      Palette, layout and the panel animation
 worker/                        API (Cloudflare Worker) and its tests
+  src/integrations.js          Draft-only integration API (see "Drafts from Claude")
+  tools/integration-token.mjs  Generates an integration token and its digest
+mcp/                           Remote MCP server for Claude.ai (separate Worker; mcp/README.md)
 migrations/                    Versioned database migrations
 db/                            Schema reference and initial data import
 ```
@@ -129,12 +132,46 @@ unavailable, the site says so and offers a Retry button; it never shows other
 content in its place (the bundled JSON is only used by builds without an API
 address).
 
+## Drafts from Claude
+
+Claude can add **private drafts** to the Library; only the owner publishes them.
+Two layers, each unable to do more than create a draft:
+
+```
+Claude.ai custom connector
+  └─ library-mcp Worker (mcp/)            OAuth 2.1 + PKCE, owner-only consent, one tool
+       └─ POST /api/integrations/drafts   library-api, dedicated bearer token
+            └─ createItem → always a draft (never public until published in the admin)
+```
+
+- **Integration API** (`worker/src/integrations.js`): `POST /api/integrations/drafts`
+  with `Authorization: Bearer <token>`. The Worker keeps only the token's SHA-256
+  digest as a secret (generate a token with `node worker/tools/integration-token.mjs`;
+  deleting the secret switches the route off). Article fields only; no listing,
+  editing, publishing or deleting; 128 KB body limit, a required rate limiter and
+  a daily quota enforced in the same database transaction as the insert.
+- **MCP server** (`mcp/`): lets the owner's Claude.ai connector call that API without
+  ever seeing the token. Setup, authentication, the DNS/certificate requirement and
+  recovery steps are in [mcp/README.md](mcp/README.md).
+- The admin sign-in (Cloudflare Access) is separate: neither credential works on
+  `/api/admin/*`.
+
 ## Tests
 
 ```bash
 npm run test:worker   # API tests (run locally, no network)
 npm run test:admin    # editor model tests
+npm run test:mcp      # MCP server tests (needs `npm --prefix mcp install` once)
 ```
+
+## Recovery
+
+- **Code:** revert the merge on `main` and push (the website redeploys itself);
+  Workers are deployed by hand: `npx wrangler@4 rollback <version-id> --name <worker>`.
+- **Stop Claude from adding drafts:** remove the connector in Claude.ai, or delete the
+  integration token's digest secret on the API Worker (the route then answers 503).
+- **Data:** D1 Time Travel restores the database to any point in the last 7 days;
+  older states need a backup.
 
 ## Database changes
 
