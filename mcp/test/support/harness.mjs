@@ -112,14 +112,16 @@ export function authorizeQuery(clientId, challenge, overrides = {}) {
 export const nonceFrom = (response) => /__Host-library-mcp-consent=([A-Za-z0-9_-]{43})/.exec(response.headers.get("set-cookie") ?? "")?.[1];
 
 /** GET the consent page then POST the decision; returns the POST response. */
-export async function consent(env, query, { decision = "approve", jwt, origin = PUBLIC, nonceOverride, cookieOverride } = {}) {
+export async function consent(env, query, { decision = "approve", jwt, origin = PUBLIC, nonceOverride, cookieOverride, extraHeaders = {}, originFromPage } = {}) {
   const token = jwt ?? (await accessJwt());
   const page = await call(env, `/authorize${query}`, { headers: { "Cf-Access-Jwt-Assertion": token } });
   const nonce = nonceFrom(page);
   const cookie = cookieOverride ?? `__Host-library-mcp-consent=${nonce}`;
   const form = new URLSearchParams({ nonce: nonceOverride ?? nonce ?? "", decision });
-  const headers = { "Cf-Access-Jwt-Assertion": token, "Content-Type": "application/x-www-form-urlencoded", Cookie: cookie };
-  if (origin) headers.Origin = origin;
+  const headers = { "Cf-Access-Jwt-Assertion": token, "Content-Type": "application/x-www-form-urlencoded", Cookie: cookie, ...extraHeaders };
+  // originFromPage(page): the Origin a real browser would send, derived from the page's headers.
+  const effectiveOrigin = originFromPage ? originFromPage(page) : origin;
+  if (effectiveOrigin) headers.Origin = effectiveOrigin;
   return { page, post: await call(env, `/authorize${query}`, { method: "POST", headers, body: form.toString() }) };
 }
 

@@ -13,9 +13,11 @@
  * form fields), so the client, redirect URI, PKCE (S256 required) and resource
  * cannot be altered between the two.
  *
- * CSRF / clickjacking: POST needs the page's Origin, a 256-bit nonce that
- * matches a __Host- SameSite=Strict cookie set by the GET, and a valid Access
- * JWT; the page cannot be framed (CSP frame-ancestors 'none', X-Frame-Options).
+ * CSRF / clickjacking: POST needs exactly this site's Origin (so the page uses
+ * Referrer-Policy "same-origin": under "no-referrer" browsers send Origin "null"),
+ * Sec-Fetch-Site "same-origin" when sent, a 256-bit nonce that matches a
+ * __Host- SameSite=Strict cookie set by the GET, and a valid Access JWT; the
+ * page cannot be framed (CSP frame-ancestors 'none', X-Frame-Options).
  */
 import { authorizationErrorRedirect } from "@cloudflare/workers-oauth-provider";
 import { AccessError, readAccessConfig, verifyAccessToken } from "../../worker/src/access.js";
@@ -37,7 +39,11 @@ function pageHeaders(extra = {}) {
     "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
-    "Referrer-Policy": "no-referrer",
+    // NOT "no-referrer": with it, browsers send `Origin: null` on the consent form's POST
+    // (Fetch standard, "append a request Origin header"), which the Origin check refuses.
+    // "same-origin" keeps the real Origin for our own POST and still sends no Referer
+    // (with the OAuth query) to any other site. The redirects add "no-referrer" (see decide()).
+    "Referrer-Policy": "same-origin",
     // form-action also covers the redirect after the POST in some browsers.
     "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self' https://claude.ai; frame-ancestors 'none'; base-uri 'none'",
     ...extra,
@@ -144,7 +150,11 @@ async function showConsent(request, env) {
 
 async function decide(request, env) {
   const expectedOrigin = new URL(String(env.PUBLIC_URL)).origin;
+  // Exact Origin match ("null" and absent are refused). Browsers that send Fetch Metadata
+  // must also report a same-origin request.
   if (request.headers.get("Origin") !== expectedOrigin) return errorPage(403, "Cross-site request refused.");
+  const fetchSite = request.headers.get("Sec-Fetch-Site");
+  if (fetchSite !== null && fetchSite !== "same-origin") return errorPage(403, "Cross-site request refused.");
   if (!/^application\/x-www-form-urlencoded\s*(;|$)/i.test(request.headers.get("Content-Type") ?? "")) return errorPage(415, "Unsupported request.");
   const length = Number(request.headers.get("Content-Length"));
   if (Number.isFinite(length) && length > MAX_FORM_BYTES) return errorPage(413, "Request too large.");
@@ -163,7 +173,9 @@ async function decide(request, env) {
   const auth = await authRequest(request, env);
   if (auth.refusal) return auth.refusal;
   const clearNonce = `${NONCE_COOKIE}=; Max-Age=0; Path=/; Secure; HttpOnly; SameSite=Strict`;
-  const redirect = (location) => new Response(null, { status: 302, headers: { Location: location, "Cache-Control": "no-store", "Set-Cookie": clearNonce } });
+  // "no-referrer" on the redirect itself: the navigation to Claude carries no Referer at all.
+  const redirect = (location) =>
+    new Response(null, { status: 302, headers: { Location: location, "Cache-Control": "no-store", "Referrer-Policy": "no-referrer", "Set-Cookie": clearNonce } });
 
   const decision = form.get("decision");
   if (decision === "deny") return redirect(authorizationErrorRedirect(auth.parsed, "access_denied"));
